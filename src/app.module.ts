@@ -56,6 +56,7 @@ import { OssFile } from './oss/entities/oss.entity';
         username: configService.get<string>('DB_USER'),
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
+        entities: [User, Job, OssFile],
       }),
     }),
     EventEmitterModule.forRoot({
