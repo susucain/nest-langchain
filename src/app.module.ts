@@ -62,8 +62,11 @@ import { OssFile } from './oss/entities/oss.entity';
         logging: true,
         poolSize: 10,
         connectTimeout: 10000,
-        acquireTimeout: 10000,
-        timeout: 10000,
+        extra: {
+          connectionLimit: 10,
+          connectTimeout: 10000,
+          timeout: 10000,
+        },
       }),
     }),
     EventEmitterModule.forRoot({

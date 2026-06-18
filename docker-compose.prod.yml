@@ -45,7 +45,7 @@ services:
       - /etc/secrets/env.prod
     environment:
       NODE_ENV: production
-      DB_HOST: mysql
+      DB_HOST: langchain-prod-mysql
       NODE_OPTIONS: "--max-old-space-size=512"
     depends_on:
       - mysql
