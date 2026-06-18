@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   mysql:
-    image: mysql:latest
+    image: mysql:8.4
     container_name: langchain-prod-mysql
     # 生产环境：不暴露端口到宿主机（只在内部网络访问）
     environment:

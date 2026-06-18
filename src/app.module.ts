@@ -16,6 +16,8 @@ import { Job } from './job/entities/job.entity';
 import { ToolModule } from './tool/tool.module';
 import { SpeechModule } from './speech/speech.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { OssModule } from './oss/oss.module';
+import { OssFile } from './oss/entities/oss.entity';
 
 @Module({
   imports: [
@@ -55,7 +57,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
         connectorPackage: 'mysql2',
-        entities: [User, Job],
+        entities: [User, Job, OssFile],
         synchronize: true,
         logging: true,
       }),
@@ -68,6 +70,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     JobModule,
     ToolModule,
     SpeechModule,
+    OssModule,
   ],
   controllers: [AppController],
   providers: [AppService],

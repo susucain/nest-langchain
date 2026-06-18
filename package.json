@@ -39,6 +39,7 @@
     "@streamdown/code": "^1.1.1",
     "@streamdown/mermaid": "^1.0.2",
     "ai": "^6.0.198",
+    "ali-oss": "^6.23.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "cron": "^4.4.0",
