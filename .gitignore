@@ -1,5 +1,5 @@
 # compiled output
-/dist
+# /dist  # 本地构建后上传，取消忽略
 /node_modules
 /build
 
