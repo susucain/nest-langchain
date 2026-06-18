@@ -25,6 +25,12 @@ services:
     restart: always
     networks:
       - langchain-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-padmin"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
     deploy:
       resources:
         limits:
@@ -45,13 +51,17 @@ services:
       - /etc/secrets/env.prod
     environment:
       NODE_ENV: production
-      DB_HOST: langchain-prod-mysql
+      DB_HOST: mysql
       NODE_OPTIONS: "--max-old-space-size=512"
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
     restart: always
     networks:
       - langchain-network
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     deploy:
       resources:
         limits:
