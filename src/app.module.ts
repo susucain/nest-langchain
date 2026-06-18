@@ -60,6 +60,10 @@ import { OssFile } from './oss/entities/oss.entity';
         entities: [User, Job, OssFile],
         synchronize: true,
         logging: true,
+        poolSize: 10,
+        connectTimeout: 10000,
+        acquireTimeout: 10000,
+        timeout: 10000,
       }),
     }),
     EventEmitterModule.forRoot({

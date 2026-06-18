@@ -3,6 +3,7 @@ import {
   Column,
   PrimaryGeneratedColumn,
   CreateDateColumn,
+  Index,
 } from 'typeorm';
 
 @Entity('oss_files')
@@ -22,6 +23,7 @@ export class OssFile {
   @Column({ name: 'created_by', type: 'varchar', length: 100, default: 'system', comment: '创建人' })
   createdBy: string;
 
+  @Index()
   @CreateDateColumn({ name: 'created_at', comment: '创建时间' })
   createdAt: Date;
 }
