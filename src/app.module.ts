@@ -56,17 +56,6 @@ import { OssFile } from './oss/entities/oss.entity';
         username: configService.get<string>('DB_USER'),
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
-        connectorPackage: 'mysql2',
-        entities: [User, Job, OssFile],
-        synchronize: true,
-        logging: true,
-        poolSize: 10,
-        connectTimeout: 10000,
-        extra: {
-          connectionLimit: 10,
-          connectTimeout: 10000,
-          timeout: 10000,
-        },
       }),
     }),
     EventEmitterModule.forRoot({
