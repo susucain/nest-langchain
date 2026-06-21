@@ -18,6 +18,9 @@ import { SpeechModule } from './speech/speech.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { OssModule } from './oss/oss.module';
 import { OssFile } from './oss/entities/oss.entity';
+import { VideoModule } from './video/video.module';
+import { VideoSession } from './video/entities/video-session.entity';
+import { VideoTask } from './video/entities/video-task.entity';
 
 @Module({
   imports: [
@@ -56,7 +59,10 @@ import { OssFile } from './oss/entities/oss.entity';
         username: configService.get<string>('DB_USER'),
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
-        entities: [User, Job, OssFile],
+        connectorPackage: 'mysql2',
+        entities: [User, Job, OssFile, VideoSession, VideoTask],
+        synchronize: true,
+        logging: true,
       }),
     }),
     EventEmitterModule.forRoot({
@@ -68,6 +74,7 @@ import { OssFile } from './oss/entities/oss.entity';
     ToolModule,
     SpeechModule,
     OssModule,
+    VideoModule,
   ],
   controllers: [AppController],
   providers: [AppService],

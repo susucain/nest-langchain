@@ -20,7 +20,7 @@ let LLMService = class LLMService {
     }
     getModel() {
         return new openai_1.ChatOpenAI({
-            temperature: 0.7,
+            temperature: 0,
             modelName: this.configService.get('MODEL_NAME'),
             apiKey: this.configService.get('OPENAI_API_KEY'),
             configuration: {

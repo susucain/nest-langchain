@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>视频分镜生成器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .result {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            min-height: 200px;
+            max-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 14px;
+            line-height: 1.6;
+            color: #333;
+        }
+        .result:empty::before {
+            content: 'AI 生成的内容将显示在这里...';
+            color: #999;
+            font-style: italic;
+        }
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .status.loading {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .image-preview {
+            margin-top: 10px;
+            max-width: 200px;
+            border-radius: 8px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎬 视频分镜生成器</h1>
+        
+        <div class="card">
+            <div class="form-group">
+                <label for="imageUrl">图片链接（可选）</label>
+                <input type="text" id="imageUrl" placeholder="例如: http://example.com/image.jpg">
+                <img id="imagePreview" class="image-preview" alt="预览">
+            </div>
+            
+            <div class="form-group">
+                <label for="prompt">提示词</label>
+                <textarea id="prompt" rows="4" placeholder="例如: 请根据这张图片生成一个30秒的美食视频分镜脚本"></textarea>
+            </div>
+            
+            <button class="btn" id="submitBtn" onclick="submitChat()">生成视频分镜</button>
+            
+            <div id="status" class="status" style="display: none;"></div>
+        </div>
+        
+        <div class="card">
+            <label>生成结果</label>
+            <div id="result" class="result"></div>
+        </div>
+    </div>
+
+    <script>
+        const imageUrlInput = document.getElementById('imageUrl');
+        const imagePreview = document.getElementById('imagePreview');
+        const promptInput = document.getElementById('prompt');
+        const submitBtn = document.getElementById('submitBtn');
+        const statusDiv = document.getElementById('status');
+        const resultDiv = document.getElementById('result');
+
+        // 图片预览
+        imageUrlInput.addEventListener('input', function() {
+            const url = this.value.trim();
+            if (url) {
+                imagePreview.src = url;
+                imagePreview.style.display = 'block';
+            } else {
+                imagePreview.style.display = 'none';
+            }
+        });
+
+        function setStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            statusDiv.style.display = 'block';
+        }
+
+        function hideStatus() {
+            statusDiv.style.display = 'none';
+        }
+
+        async function submitChat() {
+            const prompt = promptInput.value.trim();
+            const imageUrl = imageUrlInput.value.trim();
+
+            if (!prompt) {
+                setStatus('请输入提示词', 'error');
+                return;
+            }
+
+            // 构建消息 parts（AI SDK v6 格式）
+            const parts = [
+                { type: 'text', text: prompt }
+            ];
+
+            if (imageUrl) {
+                parts.push({
+                    type: 'file',
+                    mediaType: 'image/jpeg',
+                    url: imageUrl
+                });
+            }
+
+            const messages = [
+                {
+                    id: Date.now().toString(),
+                    role: 'user',
+                    parts: parts
+                }
+            ];
+
+            submitBtn.disabled = true;
+            resultDiv.textContent = '';
+            setStatus('正在生成中，请稍候...', 'loading');
+
+            try {
+                const response = await fetch('/video/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ messages })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    
+                    // 解析 SSE 事件
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const data = line.slice(6);
+                            if (data === '[DONE]') continue;
+                            
+                            try {
+                                const parsed = JSON.parse(data);
+                                // 处理不同的事件类型
+                                if (parsed.type === 'text-delta') {
+                                    resultDiv.textContent += parsed.textDelta || '';
+                                } else if (parsed.textDelta) {
+                                    resultDiv.textContent += parsed.textDelta;
+                                } else if (parsed.content) {
+                                    resultDiv.textContent += parsed.content;
+                                }
+                            } catch (e) {
+                                // 如果不是 JSON，直接显示
+                                if (data.trim()) {
+                                    resultDiv.textContent += data;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                setStatus('生成完成！', 'success');
+            } catch (error) {
+                console.error('Error:', error);
+                setStatus(`错误: ${error.message}`, 'error');
+            } finally {
+                submitBtn.disabled = false;
+            }
+        }
+
+        // 支持 Ctrl+Enter 快捷提交
+        promptInput.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                submitChat();
+            }
+        });
+    </script>
+</body>
+</html>

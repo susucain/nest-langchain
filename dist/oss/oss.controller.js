@@ -22,7 +22,8 @@ let OssController = class OssController {
         this.ossService = ossService;
     }
     upload(file) {
-        return this.ossService.uploadFile(file.originalname, file.buffer, file.mimetype);
+        const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        return this.ossService.uploadFile(originalName, file.buffer, file.mimetype);
     }
     findAll(page, pageSize) {
         return this.ossService.findAll(page ? parseInt(page, 10) : 1, pageSize ? parseInt(pageSize, 10) : 10);

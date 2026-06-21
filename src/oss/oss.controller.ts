@@ -20,8 +20,10 @@ export class OssController {
   @Post('upload')
   @UseInterceptors(FileInterceptor('file'))
   upload(@UploadedFile() file) {
+    // multer 用 latin1 解码文件名，中文会乱码，需要重新按 utf8 解码
+    const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
     return this.ossService.uploadFile(
-      file.originalname,
+      originalName,
       file.buffer,
       file.mimetype,
     );

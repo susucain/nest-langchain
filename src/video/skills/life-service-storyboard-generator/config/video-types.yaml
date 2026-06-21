@@ -1,0 +1,44 @@
+
+# 生活服务视频类型配置
+
+# ==================== 团购套餐类 ====================
+
+# 套餐种草 - 适合餐饮、酒旅、娱乐团购推荐
+package_promo:
+  visual_style: "高饱和度（诱人美食色调+清晰价格标签）"
+  character: null
+  narration_style: "激情带货型（语速较快，强调性价比）"
+  camera_rhythm: "快速切换（3-5秒一镜）"
+  background_style: "实景拍摄 + 动态价格贴纸 + 促销氛围"
+  main_color: "暖橙色/红色"
+  segments_type: "超值套餐种草模式"
+  shots_per_segment: [2, 3, 4, 3, 2]
+  max_shot_duration: 8
+
+# ==================== 达人探店类 ====================
+
+# 沉浸探店 - 适合网红店打卡、深度体验
+store_visit:
+  visual_style: "真实生活感（自然光+第一人称视角）"
+  character: "探店达人（出镜或画外音）"
+  narration_style: "亲切分享型（像朋友聊天）"
+  camera_rhythm: "中等节奏（注重体验细节）"
+  background_style: "店铺实景 + 氛围滤镜 + 真实环境音"
+  main_color: "根据店铺风格"
+  segments_type: "沉浸式探店模式"
+  shots_per_segment: [2, 2, 3, 4, 2]
+  max_shot_duration: 10
+
+# ==================== 低价营销类 ====================
+
+# 低价秒杀 - 适合餐饮代金券、酒店特惠、乐园门票
+low_price_marketing:
+  visual_style: "高冲击力（大字报+满桌菜品特写+强对比色）"
+  character: null
+  narration_style: "紧迫促销型（极快语速，制造焦虑）"
+  camera_rhythm: "极快节奏（2-4秒一镜，鬼畜剪辑）"
+  background_style: "热闹的店铺实景/满桌美食 + 醒目文字贴纸"
+  main_color: "亮黄色/红色/黑色"
+  segments_type: "低价悬念秒杀模式"
+  shots_per_segment: [1, 2, 2, 1, 1]
+  max_shot_duration: 5

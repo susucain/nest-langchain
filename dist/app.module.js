@@ -27,6 +27,9 @@ const speech_module_1 = require("./speech/speech.module");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const oss_module_1 = require("./oss/oss.module");
 const oss_entity_1 = require("./oss/entities/oss.entity");
+const video_module_1 = require("./video/video.module");
+const video_session_entity_1 = require("./video/entities/video-session.entity");
+const video_task_entity_1 = require("./video/entities/video-task.entity");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -65,7 +68,10 @@ exports.AppModule = AppModule = __decorate([
                     username: configService.get('DB_USER'),
                     password: configService.get('DB_PASS'),
                     database: configService.get('DB_NAME'),
-                    entities: [user_entity_1.User, job_entity_1.Job, oss_entity_1.OssFile],
+                    connectorPackage: 'mysql2',
+                    entities: [user_entity_1.User, job_entity_1.Job, oss_entity_1.OssFile, video_session_entity_1.VideoSession, video_task_entity_1.VideoTask],
+                    synchronize: true,
+                    logging: true,
                 }),
             }),
             event_emitter_1.EventEmitterModule.forRoot({
@@ -77,6 +83,7 @@ exports.AppModule = AppModule = __decorate([
             tool_module_1.ToolModule,
             speech_module_1.SpeechModule,
             oss_module_1.OssModule,
+            video_module_1.VideoModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],
