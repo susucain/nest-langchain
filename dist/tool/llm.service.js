@@ -26,6 +26,9 @@ let LLMService = class LLMService {
             configuration: {
                 baseURL: this.configService.get('OPENAI_BASE_URL'),
             },
+            modelKwargs: {
+                enable_thinking: false
+            }
         });
     }
 };

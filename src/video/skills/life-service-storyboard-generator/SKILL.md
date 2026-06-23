@@ -67,15 +67,15 @@ description: 生活服务视频分镜生成器，支持本地生活（团购/探
 
 #### 第一步：读取参考文件
 
-根据用户输入，按需读取以下文件（不要跳过）：
+根据用户输入，按需读取以下文件（不要跳过）。**直接使用下方给出的完整路径调用 `read_file`，禁止先用 `ls` 探索目录。**
 
-1. **用户画像**：读取 `.video-storyboard/user-profile.md`（如存在），了解用户偏好。如不存在则使用默认设置。参考：`references/user-profile.md`。
-2. **角色设定**：如果用户指定了预设角色（如"小丽"、"小蓉"、"小洁"），读取 `references/character-prompts.md` 中的对应描述。
-3. **预设服装**：如果用户指定了预设服装（如"活力探店装"），读取 `references/preset-outfits.md` 中的对应服装描述。如未指定，默认使用"活力探店装"（探店视频）或根据场景推荐。
-4. **类型配置**：读取 `references/type-configs.md` 中对应视频类型的专属配置段落（包含所有5种类型的完整参数、生成规则、示例和检查清单）。
-5. **叙事模式**：读取 `references/story-basics.md` 中的叙事模式参考和按类型的头脑风暴问题。
-6. **镜头时长**：读取 `references/shot-duration.md`。
-7. **合规指南**：读取 `references/anti-low-quality-marketing.md`。
+1. **用户画像**：读取 `src/video/skills/life-service-storyboard-generator/.video-storyboard/user-profile.md`（如存在），了解用户偏好。如不存在则使用默认设置。参考：`src/video/skills/life-service-storyboard-generator/references/user-profile.md`。
+2. **角色设定**：如果用户指定了预设角色（如"小丽"、"小蓉"、"小洁"），读取 `src/video/skills/life-service-storyboard-generator/references/character-prompts.md` 中的对应描述。
+3. **预设服装**：如果用户指定了预设服装（如"活力探店装"），读取 `src/video/skills/life-service-storyboard-generator/references/preset-outfits.md` 中的对应服装描述。如未指定，默认使用"活力探店装"（探店视频）或根据场景推荐。
+4. **类型配置**：读取 `src/video/skills/life-service-storyboard-generator/references/type-configuration-center.md` 中对应视频类型的专属配置段落（包含所有3种类型的完整参数、生成规则、示例和检查清单）。
+5. **叙事模式**：读取 `src/video/skills/life-service-storyboard-generator/references/story-patterns.md` 中的叙事模式参考和按类型的头脑风暴问题。
+6. **镜头时长**：读取 `src/video/skills/life-service-storyboard-generator/references/shot-duration.md`。
+7. **合规指南**：读取 `src/video/skills/life-service-storyboard-generator/references/anti-low-quality-marketing.md`。
 
 #### 第二步：素材分析与类型识别
 
@@ -123,8 +123,9 @@ description: 生活服务视频分镜生成器，支持本地生活（团购/探
 
 #### 第四步：生成分镜脚本
 
-以 Markdown 格式输出分镜。**必须确保画面描述与素材分析中的视觉信息保持一致。**
+在内存中准备好分镜脚本内容（Markdown 格式），**不要在此处写入文件或输出到对话中**，等阶段 3 统一写入文件。**必须确保画面描述与素材分析中的视觉信息保持一致。**
 **注意**：如果脚本中涉及人物夸张表情（如惊讶、大笑），必须在描述中加入"眼神自然"、"避免僵硬"等约束词，确保人物神态真实。
+**注意：禁止在对话中输出分镜脚本内容，只允许在阶段 3 写入 storyboard.md 文件。**
 
 **门头素材验证**（关键）：
 - 如果标记为"无门头素材"，**禁止**在分镜中出现以下描述：
@@ -174,7 +175,7 @@ description: 生活服务视频分镜生成器，支持本地生活（团购/探
 
 #### 第一步：读取 Seedance 模板
 
-读取 `references/seedance_2_0_template.md`，严格遵循其中的格式规范。
+读取 `src/video/skills/life-service-storyboard-generator/references/seedance_2_0_template.md`，严格遵循其中的格式规范。**直接使用完整路径调用 `read_file`，禁止先用 `ls` 探索目录。**
 
 #### 第二步：生成 Seedance 2.0 提示词
 
@@ -228,6 +229,8 @@ description: 生活服务视频分镜生成器，支持本地生活（团购/探
 **文件夹命名规则**：使用用户输入的**商家名**作为一级目录，使用**当前时间戳**作为二级目录，确保每次生成分镜都有独立的文件夹。
 
 保存路径：`src/video/skills/life-service-storyboard-generator/docs/storyboards/{商家名}/{YYYY-MM-DD_HH-mm-ss}/` (使用用户输入的商家名和当前时间)。
+
+**重要：必须使用并行工具调用一次性写入所有 3 个文件，不要逐个写入。** 在同一个 tool_calls 数组中同时调用 3 次 `write_file`，分别写入：
 - `storyboard.md` - 分镜脚本
 - `seedance_prompts.md` - Seedance 提示词
 - `meta.md` - 视频元数据
@@ -235,17 +238,6 @@ description: 生活服务视频分镜生成器，支持本地生活（团购/探
 **示例**：
 - 商家名："艾瑞嗨玩儿"，时间："2026-06-21_14-30-00" → 保存路径：`src/video/skills/life-service-storyboard-generator/docs/storyboards/艾瑞嗨玩儿/2026-06-21_14-30-00/`
 - 商家名："海底捞"，时间："2026-06-21_15-00-00" → 保存路径：`src/video/skills/life-service-storyboard-generator/docs/storyboards/海底捞/2026-06-21_15-00-00/`
-
-### 阶段 4：更新画像
-
-分镜生成完成后，**必须**询问用户是否更新画像文件 `references/user-profile.md`。如果只是简单的偏好更新（如增加交互次数），可以直接修改文件。如果改了其他用户画像相关的内容（如目标受众、视频类型、分镜版式等），**必须**先确认用户是否同意。
-
-**如果用户选择了更新画像：**
-- 增加交互次数
-- 更新本次使用的风格、类型、版式等的统计数据
-- 如果用户指定了预设人物名字，更新对应的"预设人物偏好"统计数据
-- 更新最后使用时间
-- 询问是否记录任何新的用户偏好
 
 ## 📂 参考资产
 - **核心**：`references/type-configs.md`（5种视频类型完整配置）, `references/story-basics.md`（叙事模式+问题清单）, `references/character-prompts.md`
