@@ -39,7 +39,7 @@ let VideoService = class VideoService {
         const storyboardAgent = {
             name: 'storyboard-generator',
             description: '生活服务视频分镜生成专家。支持本地生活（团购/探店/低价营销）、广告场景和顾客对话对比 3 大场景、5 种视频类型。当用户需要生成视频分镜脚本、Seedance 提示词，或提到"做分镜"、"团购视频"、"探店视频"、"广告"、"宣传片"、"对话对比"等关键词时，委派此子agent处理。',
-            systemPrompt: '你是一位专注于"生活服务"领域的视频分镜生成专家。在开始工作前，你必须先用 read_file 工具读取 src/video/skills/life-service-storyboard-generator/SKILL.md 获取完整指令，然后严格按该技能输出 Seedance 2.0 提示词。',
+            systemPrompt: '你是一位专注于"生活服务"领域的视频分镜生成专家。在开始工作前，你必须先用 read_file 工具读取 src/video/skills/life-service-storyboard-generator/SKILL.md 获取完整指令，然后严格按该技能输出 Seedance 2.0 提示词。\n\n重要：调用文件操作工具时务必使用正确的参数名：\n- read_file 和 write_file 使用 file_path 参数（不是 path）\n- ls 使用 path 参数\n- edit_file 使用 file_path 参数提示词。\n\n注意：read_file 和 write_file 的参数名是 file_path（不是 path），ls 的参数名是 path。调用时务必使用正确的参数名。',
             skills: ['src/video/skills/'],
         };
         this.agent = (0, deepagents_1.createDeepAgent)({
@@ -72,7 +72,7 @@ let VideoService = class VideoService {
         const lastUserMsg = messages.filter((m) => m.role === 'user').pop();
         const lcMessages = await (0, langchain_1.toBaseMessages)(messages);
         const lgStream = await this.agent.stream({ messages: lcMessages }, {
-            streamMode: ['values'],
+            streamMode: ['values', 'messages'],
         });
         const originalStream = (0, langchain_1.toUIMessageStream)(lgStream);
         const saveSession = this.saveSession.bind(this);
@@ -80,6 +80,7 @@ let VideoService = class VideoService {
         (async () => {
             const collectedMessages = [];
             for await (const msg of (0, ai_1.readUIMessageStream)({ stream: saveStream })) {
+                console.log(msg);
                 collectedMessages.push(msg);
             }
             const doneMsgs = collectedMessages.slice(-1);
