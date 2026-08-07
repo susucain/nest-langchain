@@ -4,15 +4,23 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 
 @Entity('video_tasks')
+@Index(['sessionId'])
 export class VideoTask {
   @PrimaryGeneratedColumn({ comment: '主键ID' })
   id: number;
 
-  @Column({ name: 'session_record_id', comment: 'video_sessions 表主键ID' })
-  sessionRecordId: number;
+  @Column({ name: 'session_id', length: 64, comment: '关联会话ID' })
+  sessionId: string;
+
+  @Column({ name: 'user_id', comment: '关联用户ID' })
+  userId: number;
+
+  @Column({ name: 'script_id', nullable: true, comment: '关联脚本版本ID' })
+  scriptId: number;
 
   @Column({ name: 'task_id', length: 128, unique: true, comment: '火山引擎任务ID' })
   taskId: string;

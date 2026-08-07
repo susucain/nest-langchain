@@ -15,6 +15,12 @@ let User = class User {
     id;
     name;
     email;
+    douyinOpenid;
+    douyinUnionid;
+    nickname;
+    avatarUrl;
+    status;
+    lastLoginAt;
     createdAt;
     updatedAt;
 };
@@ -25,29 +31,57 @@ __decorate([
 ], User.prototype, "id", void 0);
 __decorate([
     (0, typeorm_1.Column)({
-        length: 50
+        length: 50,
+        nullable: true,
     }),
     __metadata("design:type", String)
 ], User.prototype, "name", void 0);
 __decorate([
     (0, typeorm_1.Column)({
-        length: 50
+        length: 50,
+        nullable: true,
     }),
     __metadata("design:type", String)
 ], User.prototype, "email", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'douyin_openid', length: 128, nullable: true, unique: true }),
+    __metadata("design:type", String)
+], User.prototype, "douyinOpenid", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'douyin_unionid', length: 128, nullable: true, unique: true }),
+    __metadata("design:type", String)
+], User.prototype, "douyinUnionid", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ length: 128, nullable: true }),
+    __metadata("design:type", String)
+], User.prototype, "nickname", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'avatar_url', type: 'text', nullable: true }),
+    __metadata("design:type", String)
+], User.prototype, "avatarUrl", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ length: 32, default: 'active' }),
+    __metadata("design:type", String)
+], User.prototype, "status", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'last_login_at', type: 'datetime', nullable: true }),
+    __metadata("design:type", Date)
+], User.prototype, "lastLoginAt", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)({
-        type: 'timestamp'
+        type: 'timestamp',
+        name: 'created_at',
     }),
     __metadata("design:type", Date)
 ], User.prototype, "createdAt", void 0);
 __decorate([
     (0, typeorm_1.UpdateDateColumn)({
-        type: 'timestamp'
+        type: 'timestamp',
+        name: 'updated_at',
     }),
     __metadata("design:type", Date)
 ], User.prototype, "updatedAt", void 0);
 exports.User = User = __decorate([
-    (0, typeorm_1.Entity)()
+    (0, typeorm_1.Entity)('users')
 ], User);
 //# sourceMappingURL=user.entity.js.map

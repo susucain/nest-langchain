@@ -18,6 +18,7 @@ const video_service_1 = require("./video.service");
 const video_task_service_1 = require("./video-task.service");
 const ai_1 = require("ai");
 const crypto_1 = require("crypto");
+const rxjs_1 = require("rxjs");
 let VideoController = class VideoController {
     videoService;
     videoTaskService;
@@ -36,30 +37,50 @@ let VideoController = class VideoController {
         }
         const sessionId = body.session_id ?? (0, crypto_1.randomUUID)();
         const latestMessage = body.messages[body.messages.length - 1];
-        const stream = await this.videoService.streamChat(sessionId, latestMessage ? [latestMessage] : []);
+        const stream = await this.videoService.streamChat(sessionId, latestMessage ? [latestMessage] : [], {
+            referencedScriptId: body.referenced_script_id,
+            userId: body.user_id,
+        });
         (0, ai_1.pipeUIMessageStreamToResponse)({ response: res, stream });
     }
     async getHistory(sessionId) {
-        return this.videoService.findBySessionId(sessionId);
+        return this.videoService.findHistoryBySessionId(sessionId);
+    }
+    async createAsset(body) {
+        return this.videoService.createAsset(body);
+    }
+    async getAssets(sessionId) {
+        return this.videoService.findAssetsBySessionId(sessionId);
+    }
+    async deleteAsset(assetId) {
+        return this.videoService.deleteAsset(assetId);
+    }
+    async getScripts(sessionId) {
+        return this.videoService.findScriptsBySessionId(sessionId);
+    }
+    async getScriptDetail(scriptId) {
+        return this.videoService.findScriptById(scriptId);
     }
     async generateVideo(body) {
-        return this.videoTaskService.createTask({
-            sessionRecordId: body.session_record_id,
-            prompt: body.prompt,
-            imageUrls: body.image_urls,
-            videoUrls: body.video_urls,
-            duration: body.duration,
-            ratio: body.ratio,
-        });
+        return this.videoTaskService.createTaskByScriptId(body.script_id, body.callback_url);
     }
     async getVideoTask(taskId) {
         return this.videoTaskService.queryTask(taskId);
     }
+    streamTaskStatus(taskId) {
+        return this.videoTaskService.subscribeTaskStatus(taskId);
+    }
     async cancelOrDeleteVideoTask(taskId) {
         return this.videoTaskService.cancelOrDeleteTask(taskId);
     }
-    async getVideoTaskList(sessionRecordId) {
-        return this.videoTaskService.findBySessionRecordId(sessionRecordId);
+    async getVideoTaskList(sessionId) {
+        return this.videoTaskService.findBySessionId(sessionId);
+    }
+    async handleCallback(body) {
+        return this.videoTaskService.handleCallback(body);
+    }
+    async getSessions(userId) {
+        return this.videoService.findSessionsByUserId(userId ? Number(userId) : 1);
     }
     async getRemoteTaskList(pageNum, pageSize, status, model) {
         return this.videoTaskService.listRemoteTasks({
@@ -67,14 +88,6 @@ let VideoController = class VideoController {
             pageSize: pageSize ? Number(pageSize) : undefined,
             status,
             model,
-        });
-    }
-    async getTaskList(pageNum, pageSize, status, sessionRecordId) {
-        return this.videoTaskService.findPaginated({
-            pageNum: pageNum ? Number(pageNum) : undefined,
-            pageSize: pageSize ? Number(pageSize) : undefined,
-            status,
-            sessionRecordId: sessionRecordId ? Number(sessionRecordId) : undefined,
         });
     }
 };
@@ -95,6 +108,41 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], VideoController.prototype, "getHistory", null);
 __decorate([
+    (0, common_1.Post)('assets'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], VideoController.prototype, "createAsset", null);
+__decorate([
+    (0, common_1.Get)('assets/:sessionId'),
+    __param(0, (0, common_1.Param)('sessionId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], VideoController.prototype, "getAssets", null);
+__decorate([
+    (0, common_1.Delete)('assets/:assetId'),
+    __param(0, (0, common_1.Param)('assetId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number]),
+    __metadata("design:returntype", Promise)
+], VideoController.prototype, "deleteAsset", null);
+__decorate([
+    (0, common_1.Get)('scripts/:sessionId'),
+    __param(0, (0, common_1.Param)('sessionId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], VideoController.prototype, "getScripts", null);
+__decorate([
+    (0, common_1.Get)('scripts/:scriptId/detail'),
+    __param(0, (0, common_1.Param)('scriptId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number]),
+    __metadata("design:returntype", Promise)
+], VideoController.prototype, "getScriptDetail", null);
+__decorate([
     (0, common_1.Post)('generate'),
     __param(0, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -109,6 +157,14 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], VideoController.prototype, "getVideoTask", null);
 __decorate([
+    (0, common_1.Get)('generate/:taskId/stream'),
+    (0, common_1.Sse)(),
+    __param(0, (0, common_1.Param)('taskId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", rxjs_1.Observable)
+], VideoController.prototype, "streamTaskStatus", null);
+__decorate([
     (0, common_1.Delete)('generate/:taskId'),
     __param(0, (0, common_1.Param)('taskId')),
     __metadata("design:type", Function),
@@ -116,12 +172,26 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], VideoController.prototype, "cancelOrDeleteVideoTask", null);
 __decorate([
-    (0, common_1.Get)('generate/list/:sessionRecordId'),
-    __param(0, (0, common_1.Param)('sessionRecordId')),
+    (0, common_1.Get)('generate/list/:sessionId'),
+    __param(0, (0, common_1.Param)('sessionId')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String]),
+    __metadata("design:returntype", Promise)
+], VideoController.prototype, "getVideoTaskList", null);
+__decorate([
+    (0, common_1.Post)('callback'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], VideoController.prototype, "handleCallback", null);
+__decorate([
+    (0, common_1.Get)('sessions'),
+    __param(0, (0, common_1.Query)('user_id')),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Number]),
     __metadata("design:returntype", Promise)
-], VideoController.prototype, "getVideoTaskList", null);
+], VideoController.prototype, "getSessions", null);
 __decorate([
     (0, common_1.Get)('tasks/remote'),
     __param(0, (0, common_1.Query)('page_num')),
@@ -132,16 +202,6 @@ __decorate([
     __metadata("design:paramtypes", [Number, Number, String, String]),
     __metadata("design:returntype", Promise)
 ], VideoController.prototype, "getRemoteTaskList", null);
-__decorate([
-    (0, common_1.Get)('tasks/list'),
-    __param(0, (0, common_1.Query)('page_num')),
-    __param(1, (0, common_1.Query)('page_size')),
-    __param(2, (0, common_1.Query)('status')),
-    __param(3, (0, common_1.Query)('session_record_id')),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, Number, String, Number]),
-    __metadata("design:returntype", Promise)
-], VideoController.prototype, "getTaskList", null);
 exports.VideoController = VideoController = __decorate([
     (0, common_1.Controller)('video'),
     __metadata("design:paramtypes", [video_service_1.VideoService,

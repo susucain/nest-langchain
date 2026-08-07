@@ -1,8 +1,10 @@
 export declare class VideoSession {
     id: number;
     sessionId: string;
-    messages: string;
-    createdBy: string;
+    userId: number;
+    topic: string;
+    productProfile: Record<string, any>;
+    status: string;
     createdAt: Date;
     updatedAt: Date;
 }

@@ -4,21 +4,29 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 
 @Entity('video_sessions')
+@Index(['sessionId'], { unique: true })
 export class VideoSession {
   @PrimaryGeneratedColumn({ comment: '主键ID' })
   id: number;
 
-  @Column({ name: 'session_id', length: 64, comment: '会话ID（UUID）' })
+  @Column({ name: 'session_id', length: 64, unique: true, comment: '会话ID（UUID）' })
   sessionId: string;
 
-  @Column({ name: 'messages', type: 'longtext', nullable: true, comment: '完整的 UIMessage[] JSON 格式' })
-  messages: string;
+  @Column({ name: 'user_id', comment: '关联用户ID' })
+  userId: number;
 
-  @Column({ name: 'created_by', length: 50, default: 'system', comment: '创建人' })
-  createdBy: string;
+  @Column({ name: 'topic', length: 128, nullable: true, comment: '会话主题' })
+  topic: string;
+
+  @Column({ name: 'product_profile', type: 'json', nullable: true, comment: '结构化商品画像' })
+  productProfile: Record<string, any>;
+
+  @Column({ name: 'status', length: 32, default: 'active', comment: '会话状态' })
+  status: string;
 
   @CreateDateColumn({ name: 'created_at', comment: '创建时间' })
   createdAt: Date;

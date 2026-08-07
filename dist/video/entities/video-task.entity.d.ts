@@ -1,6 +1,8 @@
 export declare class VideoTask {
     id: number;
-    sessionRecordId: number;
+    sessionId: string;
+    userId: number;
+    scriptId: number;
     taskId: string;
     model: string;
     status: string;

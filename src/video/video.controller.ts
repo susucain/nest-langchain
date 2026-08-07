@@ -1,10 +1,11 @@
-import { Controller, Post, Get, Delete, Body, Res, Param, Query } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Res, Param, Query, Sse } from '@nestjs/common';
 import { VideoService } from './video.service';
 import { VideoTaskService } from './video-task.service';
 import { pipeUIMessageStreamToResponse } from 'ai';
 import { UIMessage } from 'ai';
 import type { Response } from 'express';
 import { randomUUID } from 'crypto';
+import { Observable } from 'rxjs';
 
 @Controller('video')
 export class VideoController {
@@ -15,53 +16,76 @@ export class VideoController {
 
   @Post('chat')
   async chat(
-    @Body() body: { messages: UIMessage[], session_id?: string },
+    @Body() body: { messages: UIMessage[]; session_id?: string; referenced_script_id?: number; user_id?: number },
     @Res() res: Response,
   ) {
     if (!body.messages || !Array.isArray(body.messages)) {
       throw new Error('Invalid messages format');
     }
 
-    // 验证消息格式（AI SDK v6 要求 parts 数组）
     for (const msg of body.messages) {
       if (!msg.parts || !Array.isArray(msg.parts)) {
         throw new Error(`Invalid message format: message must have 'parts' array. Got: ${JSON.stringify(msg)}`);
       }
     }
 
-    // 生成会话ID
     const sessionId = body.session_id ?? randomUUID();
-
-    // 只取最新消息，历史从数据库加载
     const latestMessage = body.messages[body.messages.length - 1];
-    const stream = await this.videoService.streamChat(sessionId, latestMessage ? [latestMessage] : []);
+    const stream = await this.videoService.streamChat(sessionId, latestMessage ? [latestMessage] : [], {
+      referencedScriptId: body.referenced_script_id,
+      userId: body.user_id,
+    });
     pipeUIMessageStreamToResponse({ response: res as any, stream });
   }
 
   @Get('history/:sessionId')
   async getHistory(@Param('sessionId') sessionId: string) {
-    return this.videoService.findBySessionId(sessionId);
+    return this.videoService.findHistoryBySessionId(sessionId);
+  }
+
+  @Post('assets')
+  async createAsset(
+    @Body() body: {
+      session_id: string;
+      user_id?: number;
+      asset_type: 'image' | 'video' | 'url';
+      asset_purpose: 'analysis' | 'reference';
+      name: string;
+      url: string;
+      thumbnail_url?: string;
+    },
+  ) {
+    return this.videoService.createAsset(body);
+  }
+
+  @Get('assets/:sessionId')
+  async getAssets(@Param('sessionId') sessionId: string) {
+    return this.videoService.findAssetsBySessionId(sessionId);
+  }
+
+  @Delete('assets/:assetId')
+  async deleteAsset(@Param('assetId') assetId: number) {
+    return this.videoService.deleteAsset(assetId);
+  }
+
+  @Get('scripts/:sessionId')
+  async getScripts(@Param('sessionId') sessionId: string) {
+    return this.videoService.findScriptsBySessionId(sessionId);
+  }
+
+  @Get('scripts/:scriptId/detail')
+  async getScriptDetail(@Param('scriptId') scriptId: number) {
+    return this.videoService.findScriptById(scriptId);
   }
 
   @Post('generate')
   async generateVideo(
     @Body() body: {
-      session_record_id: number;
-      prompt: string;
-      image_urls?: string[];
-      video_urls?: string[];
-      duration?: number;
-      ratio?: string;
+      script_id: number;
+      callback_url?: string;
     },
   ) {
-    return this.videoTaskService.createTask({
-      sessionRecordId: body.session_record_id,
-      prompt: body.prompt,
-      imageUrls: body.image_urls,
-      videoUrls: body.video_urls,
-      duration: body.duration,
-      ratio: body.ratio,
-    });
+    return this.videoTaskService.createTaskByScriptId(body.script_id, body.callback_url);
   }
 
   @Get('generate/:taskId')
@@ -69,14 +93,32 @@ export class VideoController {
     return this.videoTaskService.queryTask(taskId);
   }
 
+  @Get('generate/:taskId/stream')
+  @Sse()
+  streamTaskStatus(@Param('taskId') taskId: string): Observable<any> {
+    return this.videoTaskService.subscribeTaskStatus(taskId);
+  }
+
   @Delete('generate/:taskId')
   async cancelOrDeleteVideoTask(@Param('taskId') taskId: string) {
     return this.videoTaskService.cancelOrDeleteTask(taskId);
   }
 
-  @Get('generate/list/:sessionRecordId')
-  async getVideoTaskList(@Param('sessionRecordId') sessionRecordId: number) {
-    return this.videoTaskService.findBySessionRecordId(sessionRecordId);
+  @Get('generate/list/:sessionId')
+  async getVideoTaskList(@Param('sessionId') sessionId: string) {
+    return this.videoTaskService.findBySessionId(sessionId);
+  }
+
+  @Post('callback')
+  async handleCallback(
+    @Body() body: any,
+  ) {
+    return this.videoTaskService.handleCallback(body);
+  }
+
+  @Get('sessions')
+  async getSessions(@Query('user_id') userId?: number) {
+    return this.videoService.findSessionsByUserId(userId ? Number(userId) : 1);
   }
 
   @Get('tasks/remote')
@@ -91,21 +133,6 @@ export class VideoController {
       pageSize: pageSize ? Number(pageSize) : undefined,
       status,
       model,
-    });
-  }
-
-  @Get('tasks/list')
-  async getTaskList(
-    @Query('page_num') pageNum?: number,
-    @Query('page_size') pageSize?: number,
-    @Query('status') status?: string,
-    @Query('session_record_id') sessionRecordId?: number,
-  ) {
-    return this.videoTaskService.findPaginated({
-      pageNum: pageNum ? Number(pageNum) : undefined,
-      pageSize: pageSize ? Number(pageSize) : undefined,
-      status,
-      sessionRecordId: sessionRecordId ? Number(sessionRecordId) : undefined,
     });
   }
 }

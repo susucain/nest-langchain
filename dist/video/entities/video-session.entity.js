@@ -14,8 +14,10 @@ const typeorm_1 = require("typeorm");
 let VideoSession = class VideoSession {
     id;
     sessionId;
-    messages;
-    createdBy;
+    userId;
+    topic;
+    productProfile;
+    status;
     createdAt;
     updatedAt;
 };
@@ -25,17 +27,25 @@ __decorate([
     __metadata("design:type", Number)
 ], VideoSession.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'session_id', length: 64, comment: '会话ID（UUID）' }),
+    (0, typeorm_1.Column)({ name: 'session_id', length: 64, unique: true, comment: '会话ID（UUID）' }),
     __metadata("design:type", String)
 ], VideoSession.prototype, "sessionId", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'messages', type: 'longtext', nullable: true, comment: '完整的 UIMessage[] JSON 格式' }),
-    __metadata("design:type", String)
-], VideoSession.prototype, "messages", void 0);
+    (0, typeorm_1.Column)({ name: 'user_id', comment: '关联用户ID' }),
+    __metadata("design:type", Number)
+], VideoSession.prototype, "userId", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'created_by', length: 50, default: 'system', comment: '创建人' }),
+    (0, typeorm_1.Column)({ name: 'topic', length: 128, nullable: true, comment: '会话主题' }),
     __metadata("design:type", String)
-], VideoSession.prototype, "createdBy", void 0);
+], VideoSession.prototype, "topic", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'product_profile', type: 'json', nullable: true, comment: '结构化商品画像' }),
+    __metadata("design:type", Object)
+], VideoSession.prototype, "productProfile", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'status', length: 32, default: 'active', comment: '会话状态' }),
+    __metadata("design:type", String)
+], VideoSession.prototype, "status", void 0);
 __decorate([
     (0, typeorm_1.CreateDateColumn)({ name: 'created_at', comment: '创建时间' }),
     __metadata("design:type", Date)
@@ -45,6 +55,7 @@ __decorate([
     __metadata("design:type", Date)
 ], VideoSession.prototype, "updatedAt", void 0);
 exports.VideoSession = VideoSession = __decorate([
-    (0, typeorm_1.Entity)('video_sessions')
+    (0, typeorm_1.Entity)('video_sessions'),
+    (0, typeorm_1.Index)(['sessionId'], { unique: true })
 ], VideoSession);
 //# sourceMappingURL=video-session.entity.js.map

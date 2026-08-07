@@ -13,7 +13,9 @@ exports.VideoTask = void 0;
 const typeorm_1 = require("typeorm");
 let VideoTask = class VideoTask {
     id;
-    sessionRecordId;
+    sessionId;
+    userId;
+    scriptId;
     taskId;
     model;
     status;
@@ -37,9 +39,17 @@ __decorate([
     __metadata("design:type", Number)
 ], VideoTask.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'session_record_id', comment: 'video_sessions 表主键ID' }),
+    (0, typeorm_1.Column)({ name: 'session_id', length: 64, comment: '关联会话ID' }),
+    __metadata("design:type", String)
+], VideoTask.prototype, "sessionId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'user_id', comment: '关联用户ID' }),
     __metadata("design:type", Number)
-], VideoTask.prototype, "sessionRecordId", void 0);
+], VideoTask.prototype, "userId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'script_id', nullable: true, comment: '关联脚本版本ID' }),
+    __metadata("design:type", Number)
+], VideoTask.prototype, "scriptId", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'task_id', length: 128, unique: true, comment: '火山引擎任务ID' }),
     __metadata("design:type", String)
@@ -105,6 +115,7 @@ __decorate([
     __metadata("design:type", Date)
 ], VideoTask.prototype, "updatedAt", void 0);
 exports.VideoTask = VideoTask = __decorate([
-    (0, typeorm_1.Entity)('video_tasks')
+    (0, typeorm_1.Entity)('video_tasks'),
+    (0, typeorm_1.Index)(['sessionId'])
 ], VideoTask);
 //# sourceMappingURL=video-task.entity.js.map

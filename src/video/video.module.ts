@@ -6,14 +6,31 @@ import { ToolModule } from '../tool/tool.module';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VideoSession } from './entities/video-session.entity';
 import { VideoTask } from './entities/video-task.entity';
-
+import { VideoMessage } from './entities/video-message.entity';
+import { VideoAsset } from './entities/video-asset.entity';
+import { VideoScript } from './entities/video-script.entity';
+import { VideoLLMService } from './video-llm.service';
+import { SkillLoaderService } from './skill-loader.service';
+import { StoryboardParserService } from './storyboard-parser.service';
+import { VideoToolsService } from './video-tools.service';
+import { BullModule } from '@nestjs/bull';
 
 @Module({
   controllers: [VideoController],
-  providers: [VideoService, VideoTaskService],
+  providers: [
+    VideoService,
+    VideoTaskService,
+    VideoLLMService,
+    SkillLoaderService,
+    StoryboardParserService,
+    VideoToolsService,
+  ],
   imports: [
     ToolModule,
-    TypeOrmModule.forFeature([VideoSession, VideoTask]),
+    TypeOrmModule.forFeature([VideoSession, VideoTask, VideoMessage, VideoAsset, VideoScript]),
+    BullModule.registerQueue({
+      name: 'video-tasks',
+    }),
   ],
 })
 export class VideoModule {}

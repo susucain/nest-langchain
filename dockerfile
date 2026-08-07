@@ -17,6 +17,10 @@ RUN pnpm install --frozen-lockfile --prod
 # 复制本地预构建产物
 COPY dist ./dist
 COPY public ./public
+# 复制 skills 规范目录（read_file / write_file 的沙箱根），
+# 通过 SKILLS_DIR 覆盖代码中基于 process.cwd() 的默认定位
+COPY src/video/skills ./skills
+ENV SKILLS_DIR=/app/skills
 
 # 声明端口
 EXPOSE 3000

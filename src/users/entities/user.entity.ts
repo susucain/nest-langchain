@@ -1,27 +1,49 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
-@Entity()
+@Entity('users')
 export class User {
     @PrimaryGeneratedColumn()
     id: number;
 
     @Column({
-        length: 50
+        length: 50,
+        nullable: true,
     })
     name: string;
 
     @Column({
-        length: 50
+        length: 50,
+        nullable: true,
     })
     email: string;
 
+    @Column({ name: 'douyin_openid', length: 128, nullable: true, unique: true })
+    douyinOpenid: string;
+
+    @Column({ name: 'douyin_unionid', length: 128, nullable: true, unique: true })
+    douyinUnionid: string;
+
+    @Column({ length: 128, nullable: true })
+    nickname: string;
+
+    @Column({ name: 'avatar_url', type: 'text', nullable: true })
+    avatarUrl: string;
+
+    @Column({ length: 32, default: 'active' })
+    status: string;
+
+    @Column({ name: 'last_login_at', type: 'datetime', nullable: true })
+    lastLoginAt: Date;
+
     @CreateDateColumn({
-        type: 'timestamp'
+        type: 'timestamp',
+        name: 'created_at',
     })
     createdAt: Date;
 
     @UpdateDateColumn({
-        type: 'timestamp'
+        type: 'timestamp',
+        name: 'updated_at',
     })
     updatedAt: Date;
 }

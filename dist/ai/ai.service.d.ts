@@ -17,5 +17,5 @@ export declare class AiService {
     streamChain(query: string, ttsSessionId?: string): AsyncGenerator<any, void, unknown>;
     runChainWithTool(query: string): Promise<string>;
     runChainWithToolStream(query: string): AsyncGenerator<string | (import("langchain").ContentBlock | import("langchain").ContentBlock.Text)[], void, unknown>;
-    agentStream(messages: UIMessage[]): Promise<ReadableStream<import("ai").UIMessageChunk>>;
+    agentStream(messages: UIMessage[]): Promise<ReadableStream<import("ai", { with: { "resolution-mode": "import" } }).UIMessageChunk>>;
 }

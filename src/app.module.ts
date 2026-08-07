@@ -17,13 +17,21 @@ import { ToolModule } from './tool/tool.module';
 import { SpeechModule } from './speech/speech.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { OssModule } from './oss/oss.module';
+import { BullModule } from '@nestjs/bull';
+import Redis from 'ioredis';
 import { OssFile } from './oss/entities/oss.entity';
 import { VideoModule } from './video/video.module';
 import { VideoSession } from './video/entities/video-session.entity';
 import { VideoTask } from './video/entities/video-task.entity';
+import { VideoMessage } from './video/entities/video-message.entity';
+import { VideoAsset } from './video/entities/video-asset.entity';
+import { VideoScript } from './video/entities/video-script.entity';
+import { LangfuseModule } from './langfuse/langfuse.module';
 
 @Module({
   imports: [
+    // 尽早初始化 Langfuse OpenTelemetry SDK，确保 AI SDK 调用可被追踪
+    LangfuseModule,
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, '..', 'public'),
     }),
@@ -60,13 +68,27 @@ import { VideoTask } from './video/entities/video-task.entity';
         password: configService.get<string>('DB_PASS'),
         database: configService.get<string>('DB_NAME'),
         connectorPackage: 'mysql2',
-        entities: [User, Job, OssFile, VideoSession, VideoTask],
+        entities: [User, Job, OssFile, VideoSession, VideoTask, VideoMessage, VideoAsset, VideoScript],
         synchronize: true,
         logging: true,
       }),
     }),
     EventEmitterModule.forRoot({
       maxListeners: 200,
+    }),
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const redisUrl = configService.get<string>('REDIS_URL');
+        const redis = redisUrl
+          ? new Redis(redisUrl)
+          : new Redis({
+              host: configService.get<string>('REDIS_HOST') || 'localhost',
+              port: Number(configService.get<string>('REDIS_PORT') || 6379),
+              password: configService.get<string>('REDIS_PASSWORD') || undefined,
+            });
+        return { redis: redis.options as any };
+      },
     }),
     UsersModule,
     ScheduleModule.forRoot(),

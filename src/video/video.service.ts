@@ -1,140 +1,457 @@
-import { Injectable } from '@nestjs/common';
-import { ChatOpenAI } from '@langchain/openai';
-import { Inject } from '@nestjs/common';
-import { createDeepAgent, FilesystemBackend } from 'deepagents';
-import path from "node:path";
-import { toBaseMessages, toUIMessageStream } from '@ai-sdk/langchain';
-import { UIMessage, UIMessageChunk, readUIMessageStream } from 'ai';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { context, trace } from '@opentelemetry/api';
+import {
+  UIMessage,
+  ToolLoopAgent,
+  createUIMessageStream,
+  convertToModelMessages,
+  isStepCount,
+  ModelMessage,
+  isToolUIPart,
+  getToolName,
+} from 'ai';
 import { VideoSession } from './entities/video-session.entity';
-import { StructuredTool } from '@langchain/core/tools';
+import { VideoMessage } from './entities/video-message.entity';
+import { VideoAsset } from './entities/video-asset.entity';
+import { VideoScript } from './entities/video-script.entity';
+import { VideoLLMService } from './video-llm.service';
+import { SkillLoaderService } from './skill-loader.service';
+import { StoryboardParserService } from './storyboard-parser.service';
+import { VideoToolsService } from './video-tools.service';
+import { VideoTaskService } from './video-task.service';
+import { ProcessTracker } from './process-tracker';
 
-// 使用 nest-langchain 项目目录，确保 skills 路径和文件写入正确
-const projectDir = path.resolve(__dirname, "../..");
+const RECENT_MESSAGE_LIMIT = 6;
+const FALLBACK_USER_ID = 1;
 
 @Injectable()
 export class VideoService {
-  agent: ReturnType<typeof createDeepAgent>;
+  private readonly logger = new Logger(VideoService.name);
+
   constructor(
-    @Inject('CHAT_MODEL') model: ChatOpenAI,
-    @Inject('TIME_NOW_TOOL')
-    private timeNowTool: StructuredTool,
     @InjectRepository(VideoSession)
-    private videoSessionRepo: Repository<VideoSession>,
-  ) {
-    const backend = new FilesystemBackend({
-      rootDir: projectDir,
-      virtualMode: true,
-    });
+    private sessionRepo: Repository<VideoSession>,
+    @InjectRepository(VideoMessage)
+    private messageRepo: Repository<VideoMessage>,
+    @InjectRepository(VideoAsset)
+    private assetRepo: Repository<VideoAsset>,
+    @InjectRepository(VideoScript)
+    private scriptRepo: Repository<VideoScript>,
+    private llmService: VideoLLMService,
+    private skillLoader: SkillLoaderService,
+    private storyboardParser: StoryboardParserService,
+    private toolsService: VideoToolsService,
+    private taskService: VideoTaskService,
+  ) {}
 
-    // 单一主agent：直接处理视频分镜生成，接入 life-service-storyboard-generator skill
-    this.agent = createDeepAgent({
-      model: model as any,
-      systemPrompt: `你是一位专注于"生活服务"领域的视频分镜生成专家。在开始工作前，你必须先用 read_file 工具读取 src/video/skills/life-service-storyboard-generator/SKILL.md 获取完整指令，然后严格按该技能执行。
-
-**最终输出要求**：所有文件生成完毕后，你只需要在对话中输出 seedance_prompts.md 文件的内容（即 Seedance 2.0 提示词），不要输出分镜脚本（storyboard.md）和元数据（meta.md）的内容。
-
-重要：调用文件操作工具时务必使用正确的参数名：
-- read_file 和 write_file 使用 file_path 参数（不是 path）
-- ls 使用 path 参数
-- edit_file 使用 file_path 参数。
-
-注意：read_file 和 write_file 的参数名是 file_path（不是 path），ls 的参数名是 path。调用时务必使用正确的参数名。`,
-      backend,
-      skills: ['src/video/skills/'],
-      tools: [this.timeNowTool] as any,
-    });
+  async ensureSession(sessionId: string, userId?: number): Promise<VideoSession> {
+    let session = await this.sessionRepo.findOne({ where: { sessionId } });
+    if (!session) {
+      session = this.sessionRepo.create({
+        sessionId,
+        userId: userId ?? FALLBACK_USER_ID,
+        productProfile: {},
+        status: 'active',
+      });
+      await this.sessionRepo.save(session);
+    }
+    return session;
   }
 
-  /**
-   * 流式调用 agent，支持文本 + 图片，并在完成后保存会话
-   * messages 参数现在只包含最新消息，历史从数据库加载
-   */
   async streamChat(
     sessionId: string,
     messages: UIMessage[],
-  ): Promise<ReadableStream<UIMessageChunk>> {
-    // 从数据库加载历史消息
-    // const historyMessages = await this.findBySessionId(sessionId);
-
-    // 合并历史消息和最新消息
-    // const allMessages = [...historyMessages, ...messages];
-
-    // 提取最新消息用于保存
-    const lastUserMsg = messages.filter((m) => m.role === 'user').pop();
-
-    const lcMessages = await toBaseMessages(messages);
-    const lgStream = await this.agent.stream(
-      { messages: lcMessages },
-      {
-        streamMode: ['values', 'messages'],
-      },
-    );
-
-    const originalStream = toUIMessageStream(lgStream as AsyncIterable<any>);
-    const saveSession = this.saveSession.bind(this);
-
-    // 分流：一路透传给客户端，一路收集完整消息
-    const [clientStream, saveStream] = originalStream.tee();
-
-    // 异步收集完整消息并保存
-    (async () => {
-      const collectedMessages: UIMessage[] = [];
-      for await (const msg of readUIMessageStream({ stream: saveStream })) {
-        console.log(msg);
-        collectedMessages.push(msg);
-      }
-      // 只保留 state=done 的 assistant 消息（streaming 为中间态）
-      const doneMsgs = collectedMessages.slice(-1);
-      const newMsgs: UIMessage[] = [];
-      if (lastUserMsg) newMsgs.push(lastUserMsg);
-      newMsgs.push(...doneMsgs);
-      // await saveSession(sessionId, newMsgs);
-    })();
-
-    return clientStream;
-  }
-
-  /**
-   * 保存会话到数据库（以 UIMessage[] 格式存储）
-   */
-  private async saveSession(
-    sessionId: string,
-    messages: UIMessage[],
+    options?: { referencedScriptId?: number; userId?: number },
   ) {
-    const session = this.videoSessionRepo.create({
+    const session = await this.ensureSession(sessionId, options?.userId);
+    const userId = session.userId;
+
+    let currentMessageId: number | undefined;
+    const lastUserMsg = messages.filter((m) => m.role === 'user').pop();
+    if (lastUserMsg) {
+      const saved = await this.saveUserMessage(sessionId, userId, lastUserMsg);
+      currentMessageId = saved.id;
+
+      // 首条用户消息生成会话主题摘要，并刷新会话更新时间
+      if (!session.topic && saved.content) {
+        const topic = saved.content.replace(/\s+/g, ' ').trim().slice(0, 30);
+        await this.sessionRepo.update({ sessionId }, { topic });
+        session.topic = topic;
+      } else {
+        await this.touchSession(sessionId);
+      }
+    }
+
+    const recentMessages = await this.getRecentUIMessages(sessionId, RECENT_MESSAGE_LIMIT);
+    const allUiMessages: UIMessage[] = [...recentMessages, ...messages];
+
+    const modelMessages = await convertToModelMessages(allUiMessages);
+
+    const referencedScript = options?.referencedScriptId
+      ? await this.scriptRepo.findOne({ where: { id: options.referencedScriptId, sessionId } })
+      : null;
+
+    const system = await this.buildSystemPrompt(session, referencedScript);
+    const tools = this.toolsService.buildTools({
       sessionId,
-      messages: JSON.stringify(messages),
-      createdBy: 'system',
+      userId,
+      currentMessageId,
+      referencedVersion: referencedScript?.version,
     });
-    await this.videoSessionRepo.save(session);
+
+    const analysisAssets = await this.assetRepo.find({
+      where: { sessionId, assetPurpose: 'analysis' },
+      order: { createdAt: 'ASC' },
+    });
+
+    return createUIMessageStream({
+      originalMessages: allUiMessages,
+      execute: async ({ writer }) => {
+        const tracker = new ProcessTracker({
+          writer,
+          analysisAssets,
+          productProfile: session.productProfile,
+          isModification: !!referencedScript,
+        });
+        tracker.start();
+
+        // 创建 OpenTelemetry 根 span，注入 Langfuse 标准 trace 属性。
+        // 注意：
+        // 1. 列表页展示的 trace 级 name/input/output/metadata 只能通过
+        //    langfuse.trace.* / user.id / session.id 标准属性注入（由 langfuse
+        //    OTLP 服务端解析），ai.telemetry.metadata.* 不会映射为列表页字段。
+        // 2. tracer 必须使用官方 LANGFUSE_TRACER_NAME（'langfuse-sdk'），否则该
+        //    span 会被 @langfuse/otel 的 shouldExportSpan 智能过滤丢弃，属性根本
+        //    到不了服务端（之前用 'video-storyboard' 时列表页字段全空的原因）。
+        //    详情页的 observation 数据由 vercel-ai-sdk 自动采集，不受此影响。
+        const tracer = trace.getTracer('langfuse-sdk');
+        const rootSpan = tracer.startSpan('video-storyboard-chat');
+        rootSpan.setAttribute('langfuse.trace.name', 'video-storyboard-chat');
+        rootSpan.setAttribute('user.id', String(userId));
+        rootSpan.setAttribute('session.id', sessionId);
+        rootSpan.setAttribute('langfuse.trace.tags', JSON.stringify(['video-storyboard']));
+        rootSpan.setAttribute(
+          'langfuse.trace.input',
+          JSON.stringify({ sessionId, messages: modelMessages }),
+        );
+
+        try {
+          await context.with(
+            trace.setSpan(context.active(), rootSpan),
+            async () => {
+              const agent = new ToolLoopAgent({
+                instructions: system,
+                model: this.llmService.getProvider()(this.llmService.getModel()),
+                tools,
+                stopWhen: isStepCount(10),
+                telemetry: {
+                  isEnabled: true,
+                  functionId: 'video-storyboard-chat',
+                  recordInputs: true,
+                  recordOutputs: true,
+                },
+              });
+
+              const result = await agent.stream({ messages: modelMessages });
+              const toolCallMap = new Map<string, string>();
+              const watchedStream = result.toUIMessageStream().pipeThrough(
+                new TransformStream({
+                  transform: (chunk, controller) => {
+                    this.handleProcessChunk(chunk as any, tracker, toolCallMap);
+                    controller.enqueue(chunk);
+                  },
+                }),
+              );
+
+              // 手动消费流，确保所有 chunk 处理完成后再结束过程面板
+              const replyText: string[] = [];
+              for await (const chunk of watchedStream as any) {
+                if (chunk?.type === 'text-delta') {
+                  const t = chunk.delta ?? chunk.text;
+                  if (typeof t === 'string') replyText.push(t);
+                }
+                writer.write(chunk);
+              }
+              rootSpan.setAttribute(
+                'langfuse.trace.output',
+                JSON.stringify({ reply: replyText.join('') }),
+              );
+              tracker.finish();
+            },
+          );
+        } catch (err: any) {
+          this.logger.error(`创作过程流异常: ${err.message}`, err.stack);
+          rootSpan.recordException(err);
+          tracker.error();
+          throw err;
+        } finally {
+          rootSpan.end();
+        }
+      },
+      onEnd: async ({ messages: finalMessages }) => {
+        const assistant = finalMessages.filter((m) => m.role === 'assistant').pop();
+        if (assistant) {
+          await this.saveAssistantUIMessage(sessionId, userId, assistant as UIMessage);
+        }
+      },
+    });
   }
 
-  findAll() {
-    return `This action returns all video`;
+  private handleProcessChunk(
+    chunk: any,
+    tracker: ProcessTracker,
+    toolCallMap: Map<string, string>,
+  ) {
+    if (chunk.type === 'tool-input-available') {
+      const { toolCallId, toolName, input } = chunk;
+      if (toolCallId && toolName) {
+        toolCallMap.set(toolCallId, toolName);
+      }
+      if (!ProcessTracker.isGenerationTool(toolName)) return;
+
+      if (toolName === 'parse_asset' && input?.asset_id != null) {
+        tracker.markAssetRunning(Number(input.asset_id));
+      } else if (toolName === 'update_product_profile') {
+        tracker.markProfileRunning();
+      } else if (toolName === 'generate_script') {
+        tracker.markGenerating();
+      } else {
+        tracker.recordActivity();
+      }
+      return;
+    }
+
+    if (chunk.type === 'tool-output-available') {
+      const { toolCallId, output } = chunk;
+      const toolName = toolCallMap.get(toolCallId);
+      if (!toolName) return;
+
+      if (toolName === 'parse_asset' && output?.asset_id != null) {
+        tracker.markAssetParsed(Number(output.asset_id), output.summary ?? '已解析');
+      } else if (toolName === 'update_product_profile') {
+        tracker.markProfileUpdated(output?.profile);
+      } else if (toolName === 'generate_script' && output) {
+        tracker.markScriptGenerated({
+          title: output.title ?? '分镜脚本',
+          shot_count: output.shot_count ?? 0,
+          version: output.version ?? 1,
+        });
+      } else if (ProcessTracker.isGenerationTool(toolName)) {
+        tracker.recordActivity();
+      }
+    }
   }
 
-  /**
-   * 根据 sessionId 查询会话记录，返回 UIMessage[] 格式
-   * 按时间正序拼接所有轮次的消息
-   */
-  async findBySessionId(sessionId: string): Promise<UIMessage[]> {
-    const res = await this.videoSessionRepo.find({
+  async findHistoryBySessionId(sessionId: string): Promise<UIMessage[]> {
+    const messages = await this.messageRepo.find({
       where: { sessionId },
       order: { createdAt: 'ASC' },
-      take: 100,
+      take: 200,
     });
 
-    return res.map((item) => JSON.parse(item.messages)).flat();
-
+    return messages.map((m) => ({
+      id: String(m.id),
+      role: m.role as 'user' | 'assistant',
+      content: m.content || '',
+      parts: (m.parts?.length ? m.parts : [{ type: 'text', text: m.content || '' }]) as unknown as UIMessage['parts'],
+      createdAt: m.createdAt,
+      metadata: m.metadata ?? undefined,
+    })) as UIMessage[];
   }
 
-  findOne(id: number) {
-    return `This action returns a #${id} video`;
+  private async getRecentUIMessages(sessionId: string, limit: number): Promise<UIMessage[]> {
+    const messages = await this.messageRepo.find({
+      where: { sessionId },
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
+
+    return messages
+      .reverse()
+      .map((m) => ({
+        id: String(m.id),
+        role: m.role as 'user' | 'assistant',
+        content: m.content || '',
+        parts: (m.parts?.length ? m.parts : [{ type: 'text', text: m.content || '' }]) as unknown as UIMessage['parts'],
+        createdAt: m.createdAt,
+        metadata: m.metadata ?? undefined,
+      })) as UIMessage[];
   }
 
-  remove(id: number) {
-    return `This action removes a #${id} video`;
+  private async buildSystemPrompt(
+    session: VideoSession,
+    referencedScript?: VideoScript | null,
+  ): Promise<string> {
+    const [skillMeta, assets] = await Promise.all([
+      this.skillLoader.loadMeta(),
+      this.assetRepo.find({ where: { sessionId: session.sessionId }, order: { createdAt: 'ASC' } }),
+    ]);
+
+    let prompt = `你是映语 AI 达人带货视频工作台。帮助用户为商品生成带货视频分镜脚本，并支持一键生成视频。\n`;
+    prompt += `当前会话 ID：${session.sessionId}\n`;
+
+    if (session.productProfile && Object.keys(session.productProfile).length > 0) {
+      prompt += `\n## 商品画像\n${JSON.stringify(session.productProfile, null, 2)}\n`;
+    }
+
+    if (assets.length > 0) {
+      prompt += `\n## 关联素材\n`;
+      for (const asset of assets) {
+        const summary = asset.assetPurpose === 'analysis'
+          ? (asset.parsedContent?.summary || '待解析（可调用 parse_asset 解析，asset_id 见 # 编号）')
+          : asset.url;
+        prompt += `[${asset.assetPurpose}] #${asset.id} ${asset.assetType} - ${asset.name}: ${summary}\n`;
+      }
+    }
+
+    if (referencedScript) {
+      prompt += `\n## 待修改脚本（V${referencedScript.version}）\n${referencedScript.scriptMarkdown}\n`;
+      prompt += `\n请基于以上脚本生成新版本 V${referencedScript.version + 1}，仅输出修改后的完整内容，不要 diff。\n`;
+    }
+
+    const skillContent = await this.skillLoader.loadFullContent();
+    prompt += `\n## Skill: ${skillMeta.name}\n${skillContent}\n`;
+
+    prompt += `\n## 📂 参考文件读取\n`;
+    prompt += `Skill 中提到的参考文件位于 skills 目录下，你可以使用 **read_file** 工具按需读取。\n`;
+    prompt += `路径格式：life-service-storyboard-generator/references/<文件名>，例如 \`life-service-storyboard-generator/references/shot-duration.md\`。\n`;
+    prompt += `**按需读取**：只读取当前任务真正需要的文件，不要一次性读取所有文件。\n`;
+
+    prompt += `\n## 输出约定（必须严格遵守）\n`;
+    prompt += `1. Skill 中提到的「写入 storyboard.md / seedance_prompts.md / meta.md 文件」操作，请使用 **write_file** 工具写入到 \`life-service-storyboard-generator/docs/storyboards/{商家名}/{时间戳}/\` 目录下。同时仍需调用 generate_script 工具将结构化数据写入数据库。\n`;
+    prompt += `2. 当你分析完素材并准备好分镜脚本后，**必须**调用 generate_script 工具保存结果。工具参数包括：title、storyboard_markdown、seedance_prompt、meta。禁止在对话文本中输出完整的分镜脚本或 Seedance 提示词。\n`;
+    prompt += `3. storyboard_markdown 必须严格遵循 Skill 中的分镜脚本格式，每个镜头使用如下格式（示例）：\n`;
+    prompt += `### 镜头 1：福利钩子 (0s - 3s)\n- **画面描述**：手持红色手牌，镜头从手牌快速拉远露出店内环境。\n- **旁白**：今天这家火锅套餐，人均不到五十！\n`;
+    prompt += `4. seedance_prompt 必须严格遵循 Skill 中的 Seedance 2.0 提示词格式。\n`;
+    prompt += `5. 当用户提供了商品名称、卖点、目标人群、时长、平台、风格等信息时，及时调用 update_product_profile 工具更新商品画像。\n`;
+    prompt += `6. 最终回复保持简洁，只给用户一个自然的中文确认即可，例如"脚本已生成，你可以查看下方的分镜卡片"。\n`;
+
+    return prompt;
+  }
+
+  private async saveUserMessage(sessionId: string, userId: number, message: UIMessage) {
+    const textPart = message.parts?.find((p: any) => p.type === 'text');
+    const content = textPart ? (textPart as any).text : '';
+    const parts = message.parts?.filter((part: any) => part.type === 'text' || part.type === 'file');
+    return this.messageRepo.save({
+      sessionId,
+      userId,
+      role: 'user',
+      content,
+      parts,
+    });
+  }
+
+  /** 刷新会话 updatedAt，使会话列表按最新消息排序 */
+  private async touchSession(sessionId: string) {
+    await this.sessionRepo
+      .createQueryBuilder()
+      .update(VideoSession)
+      .set({ updatedAt: () => 'CURRENT_TIMESTAMP' })
+      .where('session_id = :sessionId', { sessionId })
+      .execute();
+  }
+
+  private async saveAssistantUIMessage(sessionId: string, userId: number, message: UIMessage) {
+    const text = message.parts
+      ?.filter((p: any) => p.type === 'text')
+      .map((p: any) => p.text)
+      .join('') || '';
+
+    // 仅记录工具名与结果摘要，不存储完整工具输出（脚本内容等由独立表承载）
+    const toolCalls = message.parts
+      ?.filter((p: any) => isToolUIPart(p))
+      .map((p: any) => {
+        const output = 'output' in p ? p.output : undefined;
+        const outputStr = output !== undefined ? JSON.stringify(output) : undefined;
+        return {
+          tool: getToolName(p),
+          outputSummary:
+            outputStr && outputStr.length > 500 ? outputStr.slice(0, 500) + '…' : output,
+        };
+      }) || [];
+
+    // 提取 generate_script 生成的 script_id，便于前端从历史消息中快速定位脚本
+    const generatedScriptId = message.parts
+      ?.filter((p: any) => isToolUIPart(p))
+      .map((p: any) => {
+        if (getToolName(p) !== 'generate_script') return null;
+        const output = 'output' in p ? p.output : undefined;
+        return output && typeof output === 'object' ? output.script_id : null;
+      })
+      .find((id): id is number => typeof id === 'number');
+
+    await this.messageRepo.save({
+      sessionId,
+      userId,
+      role: 'assistant',
+      content: text,
+      toolCalls,
+      metadata: generatedScriptId ? { scriptId: generatedScriptId } : undefined,
+    });
+  }
+
+  async updateProductProfile(sessionId: string, profile: Record<string, any>) {
+    await this.sessionRepo.update({ sessionId }, { productProfile: profile });
+  }
+
+  async updateSessionStatus(sessionId: string, status: string) {
+    await this.sessionRepo.update({ sessionId }, { status });
+  }
+
+  async createAsset(body: {
+    session_id: string;
+    user_id?: number;
+    asset_type: 'image' | 'video' | 'url';
+    asset_purpose: 'analysis' | 'reference';
+    name: string;
+    url: string;
+    thumbnail_url?: string;
+  }) {
+    const session = await this.ensureSession(body.session_id, body.user_id);
+    const asset = this.assetRepo.create({
+      sessionId: body.session_id,
+      userId: session.userId,
+      assetType: body.asset_type,
+      assetPurpose: body.asset_purpose,
+      name: body.name,
+      url: body.url,
+      thumbnailUrl: body.thumbnail_url,
+      status: body.asset_purpose === 'reference' ? 'parsed' : 'pending',
+    });
+    return this.assetRepo.save(asset);
+  }
+
+  async findAssetsBySessionId(sessionId: string) {
+    return this.assetRepo.find({
+      where: { sessionId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async deleteAsset(assetId: number) {
+    await this.assetRepo.delete(assetId);
+    return { success: true };
+  }
+
+  async findScriptsBySessionId(sessionId: string) {
+    return this.scriptRepo.find({
+      where: { sessionId },
+      order: { version: 'DESC' },
+    });
+  }
+
+  async findScriptById(scriptId: number) {
+    return this.scriptRepo.findOne({ where: { id: scriptId } });
+  }
+
+  async findSessionsByUserId(userId: number) {
+    return this.sessionRepo.find({
+      where: { userId },
+      order: { updatedAt: 'DESC' },
+      select: { id: true, sessionId: true, topic: true, status: true, productProfile: true, createdAt: true, updatedAt: true },
+    });
   }
 }

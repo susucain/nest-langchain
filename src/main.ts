@@ -5,6 +5,8 @@ import { TtsRelayService } from './speech/tts-relay.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // 启用应用关闭钩子，确保在应用关闭时执行清理操作
+  app.enableShutdownHooks();
   const ttsRelayService = app.get(TtsRelayService);
   const server = app.getHttpServer();
   const wss = new WebSocketServer({ server, path: '/speech/tts/ws' });

@@ -6,6 +6,7 @@ const ws_1 = require("ws");
 const tts_relay_service_1 = require("./speech/tts-relay.service");
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    app.enableShutdownHooks();
     const ttsRelayService = app.get(tts_relay_service_1.TtsRelayService);
     const server = app.getHttpServer();
     const wss = new ws_1.WebSocketServer({ server, path: '/speech/tts/ws' });
