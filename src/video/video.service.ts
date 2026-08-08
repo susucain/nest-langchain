@@ -82,10 +82,33 @@ export class VideoService {
       } else {
         await this.touchSession(sessionId);
       }
+
+      // 用户消息中的文件附件在发送时统一入库（前端上传/添加链接时不入库）。
+      // 入库时机必须在模型 parse_asset 解析之前，否则素材不在库中无法按 asset_id 定位。
+      const fileParts = (lastUserMsg.parts ?? []).filter((p: any) => p.type === 'file');
+      if (fileParts.length > 0) {
+        await Promise.all(
+          fileParts.map((part: any) => {
+            const mediaType: string = part.mediaType ?? '';
+            return this.createAsset({
+              session_id: sessionId,
+              user_id: userId,
+              asset_type: mediaType.startsWith('video/')
+                ? 'video'
+                : mediaType.startsWith('image/')
+                  ? 'image'
+                  : 'url',
+              asset_purpose: part.purpose === 'reference' ? 'reference' : 'analysis',
+              name: part.filename ?? '附件素材',
+              url: part.url,
+            });
+          }),
+        );
+      }
     }
 
     const recentMessages = await this.getRecentUIMessages(sessionId, RECENT_MESSAGE_LIMIT);
-    const allUiMessages: UIMessage[] = [...recentMessages, ...messages];
+    const allUiMessages: UIMessage[] = [...recentMessages];
 
     const modelMessages = await convertToModelMessages(allUiMessages);
 
@@ -138,6 +161,7 @@ export class VideoService {
         );
 
         try {
+          this.logger.log(`当前会话消息: ${JSON.stringify(modelMessages)}`);
           await context.with(
             trace.setSpan(context.active(), rootSpan),
             async () => {
@@ -411,6 +435,15 @@ export class VideoService {
     thumbnail_url?: string;
   }) {
     const session = await this.ensureSession(body.session_id, body.user_id);
+
+    // 去重：同一 session + user 下 url 唯一，重复上传直接返回已有资产，避免重复入库
+    const existing = await this.assetRepo.findOne({
+      where: { sessionId: body.session_id, userId: session.userId, url: body.url },
+    });
+    if (existing) {
+      return existing;
+    }
+
     const asset = this.assetRepo.create({
       sessionId: body.session_id,
       userId: session.userId,
@@ -447,11 +480,22 @@ export class VideoService {
     return this.scriptRepo.findOne({ where: { id: scriptId } });
   }
 
-  async findSessionsByUserId(userId: number) {
-    return this.sessionRepo.find({
+  async findSessionsByUserId(userId: number, options?: { page?: number; pageSize?: number }) {
+    const page = options?.page ?? 1;
+    const pageSize = options?.pageSize ?? 7;
+    const [items, total] = await this.sessionRepo.findAndCount({
       where: { userId },
       order: { updatedAt: 'DESC' },
       select: { id: true, sessionId: true, topic: true, status: true, productProfile: true, createdAt: true, updatedAt: true },
+      skip: (page - 1) * pageSize,
+      take: pageSize,
     });
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      hasMore: page * pageSize < total,
+    };
   }
 }

@@ -42,6 +42,12 @@ export declare class VideoController {
     handleCallback(body: any): Promise<{
         received: boolean;
     }>;
-    getSessions(userId?: number): Promise<import("./entities/video-session.entity").VideoSession[]>;
+    getSessions(userId?: number, page?: number, pageSize?: number): Promise<{
+        items: import("./entities/video-session.entity").VideoSession[];
+        total: number;
+        page: number;
+        pageSize: number;
+        hasMore: boolean;
+    }>;
     getRemoteTaskList(pageNum?: number, pageSize?: number, status?: string, model?: string): Promise<any>;
 }

@@ -79,8 +79,11 @@ let VideoController = class VideoController {
     async handleCallback(body) {
         return this.videoTaskService.handleCallback(body);
     }
-    async getSessions(userId) {
-        return this.videoService.findSessionsByUserId(userId ? Number(userId) : 1);
+    async getSessions(userId, page, pageSize) {
+        return this.videoService.findSessionsByUserId(userId ? Number(userId) : 1, {
+            page: page ? Number(page) : 1,
+            pageSize: pageSize ? Number(pageSize) : 7,
+        });
     }
     async getRemoteTaskList(pageNum, pageSize, status, model) {
         return this.videoTaskService.listRemoteTasks({
@@ -188,8 +191,10 @@ __decorate([
 __decorate([
     (0, common_1.Get)('sessions'),
     __param(0, (0, common_1.Query)('user_id')),
+    __param(1, (0, common_1.Query)('page')),
+    __param(2, (0, common_1.Query)('page_size')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number]),
+    __metadata("design:paramtypes", [Number, Number, Number]),
     __metadata("design:returntype", Promise)
 ], VideoController.prototype, "getSessions", null);
 __decorate([

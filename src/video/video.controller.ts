@@ -117,8 +117,15 @@ export class VideoController {
   }
 
   @Get('sessions')
-  async getSessions(@Query('user_id') userId?: number) {
-    return this.videoService.findSessionsByUserId(userId ? Number(userId) : 1);
+  async getSessions(
+    @Query('user_id') userId?: number,
+    @Query('page') page?: number,
+    @Query('page_size') pageSize?: number,
+  ) {
+    return this.videoService.findSessionsByUserId(userId ? Number(userId) : 1, {
+      page: page ? Number(page) : 1,
+      pageSize: pageSize ? Number(pageSize) : 7,
+    });
   }
 
   @Get('tasks/remote')

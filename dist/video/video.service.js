@@ -82,9 +82,27 @@ let VideoService = VideoService_1 = class VideoService {
             else {
                 await this.touchSession(sessionId);
             }
+            const fileParts = (lastUserMsg.parts ?? []).filter((p) => p.type === 'file');
+            if (fileParts.length > 0) {
+                await Promise.all(fileParts.map((part) => {
+                    const mediaType = part.mediaType ?? '';
+                    return this.createAsset({
+                        session_id: sessionId,
+                        user_id: userId,
+                        asset_type: mediaType.startsWith('video/')
+                            ? 'video'
+                            : mediaType.startsWith('image/')
+                                ? 'image'
+                                : 'url',
+                        asset_purpose: part.purpose === 'reference' ? 'reference' : 'analysis',
+                        name: part.filename ?? '附件素材',
+                        url: part.url,
+                    });
+                }));
+            }
         }
         const recentMessages = await this.getRecentUIMessages(sessionId, RECENT_MESSAGE_LIMIT);
-        const allUiMessages = [...recentMessages, ...messages];
+        const allUiMessages = [...recentMessages];
         const modelMessages = await (0, ai_1.convertToModelMessages)(allUiMessages);
         const referencedScript = options?.referencedScriptId
             ? await this.scriptRepo.findOne({ where: { id: options.referencedScriptId, sessionId } })
@@ -118,6 +136,7 @@ let VideoService = VideoService_1 = class VideoService {
                 rootSpan.setAttribute('langfuse.trace.tags', JSON.stringify(['video-storyboard']));
                 rootSpan.setAttribute('langfuse.trace.input', JSON.stringify({ sessionId, messages: modelMessages }));
                 try {
+                    this.logger.log(`当前会话消息: ${JSON.stringify(modelMessages)}`);
                     await api_1.context.with(api_1.trace.setSpan(api_1.context.active(), rootSpan), async () => {
                         const agent = new ai_1.ToolLoopAgent({
                             instructions: system,
@@ -347,6 +366,12 @@ let VideoService = VideoService_1 = class VideoService {
     }
     async createAsset(body) {
         const session = await this.ensureSession(body.session_id, body.user_id);
+        const existing = await this.assetRepo.findOne({
+            where: { sessionId: body.session_id, userId: session.userId, url: body.url },
+        });
+        if (existing) {
+            return existing;
+        }
         const asset = this.assetRepo.create({
             sessionId: body.session_id,
             userId: session.userId,
@@ -378,12 +403,23 @@ let VideoService = VideoService_1 = class VideoService {
     async findScriptById(scriptId) {
         return this.scriptRepo.findOne({ where: { id: scriptId } });
     }
-    async findSessionsByUserId(userId) {
-        return this.sessionRepo.find({
+    async findSessionsByUserId(userId, options) {
+        const page = options?.page ?? 1;
+        const pageSize = options?.pageSize ?? 7;
+        const [items, total] = await this.sessionRepo.findAndCount({
             where: { userId },
             order: { updatedAt: 'DESC' },
             select: { id: true, sessionId: true, topic: true, status: true, productProfile: true, createdAt: true, updatedAt: true },
+            skip: (page - 1) * pageSize,
+            take: pageSize,
         });
+        return {
+            items,
+            total,
+            page,
+            pageSize,
+            hasMore: page * pageSize < total,
+        };
     }
 };
 exports.VideoService = VideoService;

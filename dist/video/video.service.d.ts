@@ -50,5 +50,14 @@ export declare class VideoService {
     }>;
     findScriptsBySessionId(sessionId: string): Promise<VideoScript[]>;
     findScriptById(scriptId: number): Promise<VideoScript | null>;
-    findSessionsByUserId(userId: number): Promise<VideoSession[]>;
+    findSessionsByUserId(userId: number, options?: {
+        page?: number;
+        pageSize?: number;
+    }): Promise<{
+        items: VideoSession[];
+        total: number;
+        page: number;
+        pageSize: number;
+        hasMore: boolean;
+    }>;
 }
