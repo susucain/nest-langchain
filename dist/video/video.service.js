@@ -105,7 +105,7 @@ let VideoService = VideoService_1 = class VideoService {
             ? await this.scriptRepo.findOne({ where: { id: options.referencedScriptId, sessionId } })
             : null;
         const allUiMessages = await this.buildModelContext(sessionId, messages, referencedScript);
-        const modelMessages = await (0, ai_1.convertToModelMessages)(allUiMessages);
+        const modelMessages = await (0, ai_1.convertToModelMessages)(this.prepareQwenVideoMessages(allUiMessages));
         const system = await this.buildSystemPrompt(session);
         const tools = this.toolsService.buildTools({
             sessionId,
@@ -313,6 +313,31 @@ let VideoService = VideoService_1 = class VideoService {
                     ].join('\n'),
                 }],
         };
+    }
+    prepareQwenVideoMessages(messages) {
+        return messages.map((message) => {
+            if (message.role !== 'user')
+                return message;
+            return {
+                ...message,
+                parts: message.parts.map((part) => {
+                    if (part.type !== 'file' || !part.mediaType?.startsWith('video/')) {
+                        return part;
+                    }
+                    return {
+                        ...part,
+                        mediaType: 'image/jpeg',
+                        providerMetadata: {
+                            ...(part.providerMetadata ?? {}),
+                            openaiCompatible: {
+                                ...(part.providerMetadata?.openaiCompatible ?? {}),
+                                qwenVideoInput: true,
+                            },
+                        },
+                    };
+                }),
+            };
+        });
     }
     async buildSystemPrompt(session) {
         const [skillMeta, assets] = await Promise.all([

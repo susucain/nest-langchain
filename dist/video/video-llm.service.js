@@ -25,6 +25,24 @@ let VideoLLMService = class VideoLLMService {
             apiKey: this.configService.get('OPENAI_API_KEY') || '',
             transformRequestBody: (body) => ({
                 ...body,
+                messages: body.messages?.map((message) => {
+                    if (!Array.isArray(message.content))
+                        return message;
+                    return {
+                        ...message,
+                        content: message.content.map((part) => {
+                            if (part?.qwenVideoInput !== true || part.type !== 'image_url') {
+                                return part;
+                            }
+                            return {
+                                type: 'video_url',
+                                video_url: {
+                                    url: part.image_url.url,
+                                },
+                            };
+                        }),
+                    };
+                }),
                 enable_thinking: false,
             }),
         });

@@ -32,6 +32,7 @@ export declare class VideoService {
     private buildModelContext;
     private getUIMessagesThroughId;
     private createReferencedScriptMessage;
+    private prepareQwenVideoMessages;
     private buildSystemPrompt;
     private saveUserMessage;
     private touchSession;

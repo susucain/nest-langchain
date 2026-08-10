@@ -116,7 +116,9 @@ export class VideoService {
       messages,
       referencedScript,
     );
-    const modelMessages = await convertToModelMessages(allUiMessages);
+    const modelMessages = await convertToModelMessages(
+      this.prepareQwenVideoMessages(allUiMessages),
+    );
 
     const system = await this.buildSystemPrompt(session);
     const tools = this.toolsService.buildTools({
@@ -375,6 +377,38 @@ export class VideoService {
         ].join('\n'),
       }],
     } as UIMessage;
+  }
+
+  /**
+   * The OpenAI-compatible SDK converter has no video file part support. Encode
+   * video URLs as images temporarily, then VideoLLMService maps the marker to
+   * Qwen's video_url request shape immediately before the request is sent.
+   */
+  private prepareQwenVideoMessages(messages: UIMessage[]): UIMessage[] {
+    return messages.map((message) => {
+      if (message.role !== 'user') return message;
+
+      return {
+        ...message,
+        parts: message.parts.map((part: any) => {
+          if (part.type !== 'file' || !part.mediaType?.startsWith('video/')) {
+            return part;
+          }
+
+          return {
+            ...part,
+            mediaType: 'image/jpeg',
+            providerMetadata: {
+              ...(part.providerMetadata ?? {}),
+              openaiCompatible: {
+                ...(part.providerMetadata?.openaiCompatible ?? {}),
+                qwenVideoInput: true,
+              },
+            },
+          };
+        }),
+      };
+    });
   }
 
   private async buildSystemPrompt(
