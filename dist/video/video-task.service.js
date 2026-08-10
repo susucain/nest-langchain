@@ -18,6 +18,7 @@ var VideoTaskService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.VideoTaskService = void 0;
 const common_1 = require("@nestjs/common");
+const crypto_1 = require("crypto");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const config_1 = require("@nestjs/config");
@@ -27,6 +28,16 @@ const ioredis_1 = __importDefault(require("ioredis"));
 const video_task_entity_1 = require("./entities/video-task.entity");
 const video_script_entity_1 = require("./entities/video-script.entity");
 const video_asset_entity_1 = require("./entities/video-asset.entity");
+const TASK_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'expired', 'cancelled'];
+const TERMINAL_TASK_STATUSES = new Set(['succeeded', 'failed', 'expired', 'cancelled']);
+const TASK_STATUS_ORDER = {
+    queued: 0,
+    running: 1,
+    succeeded: 2,
+    failed: 2,
+    expired: 2,
+    cancelled: 2,
+};
 let VideoTaskService = VideoTaskService_1 = class VideoTaskService {
     videoTaskRepo;
     scriptRepo;
@@ -107,9 +118,7 @@ let VideoTaskService = VideoTaskService_1 = class VideoTaskService {
             return_last_frame: true,
             resolution: '720p',
         };
-        if (params.callbackUrl) {
-            requestBody.callback_url = params.callbackUrl;
-        }
+        requestBody.callback_url = this.getCallbackUrl();
         this.logger.log(`创建视频生成任务: ${JSON.stringify(requestBody)}`);
         const response = await fetch('', {
             method: 'POST',
@@ -140,10 +149,39 @@ let VideoTaskService = VideoTaskService_1 = class VideoTaskService {
         await this.videoTaskRepo.save(task);
         return task;
     }
-    async createTaskByScriptId(scriptId, callbackUrl) {
+    async createTaskByScriptId(scriptId, options = {}) {
         const script = await this.scriptRepo.findOne({ where: { id: scriptId } });
         if (!script) {
             throw new Error(`脚本不存在: ${scriptId}`);
+        }
+        if (options.sessionId && options.sessionId !== script.sessionId) {
+            throw new Error('脚本不属于当前会话');
+        }
+        if (options.userId && options.userId !== script.userId) {
+            throw new Error('无权使用该脚本生成视频');
+        }
+        const suppliedAssets = options.assets ?? [];
+        for (const asset of suppliedAssets) {
+            const existing = await this.assetRepo.findOne({
+                where: { sessionId: script.sessionId, userId: script.userId, url: asset.url },
+            });
+            if (existing) {
+                if (existing.assetPurpose !== 'reference') {
+                    existing.assetPurpose = 'reference';
+                    existing.status = 'parsed';
+                    await this.assetRepo.save(existing);
+                }
+                continue;
+            }
+            await this.assetRepo.save(this.assetRepo.create({
+                sessionId: script.sessionId,
+                userId: script.userId,
+                assetType: asset.type,
+                assetPurpose: 'reference',
+                name: asset.name || '视频生成参考素材',
+                url: asset.url,
+                status: 'parsed',
+            }));
         }
         const referenceAssets = await this.assetRepo.find({
             where: { sessionId: script.sessionId, assetPurpose: 'reference' },
@@ -154,17 +192,17 @@ let VideoTaskService = VideoTaskService_1 = class VideoTaskService {
         const videoUrls = referenceAssets
             .filter((a) => a.assetType === 'video')
             .map((a) => a.url);
-        const defaultCallback = this.configService.get('APP_BASE_URL')
-            ? `${this.configService.get('APP_BASE_URL')}/video/callback`
-            : undefined;
+        const userPrompt = options.userPrompt?.trim();
+        const prompt = userPrompt
+            ? `${script.seedancePrompt}\n\n## 本次生成补充要求\n${userPrompt}`
+            : script.seedancePrompt;
         return this.createTask({
             sessionId: script.sessionId,
             userId: script.userId,
             scriptId: script.id,
-            prompt: script.seedancePrompt,
-            imageUrls,
-            videoUrls,
-            callbackUrl: callbackUrl || defaultCallback,
+            prompt,
+            imageUrls: [...new Set(imageUrls)],
+            videoUrls: [...new Set(videoUrls)],
         });
     }
     async queryTask(taskId) {
@@ -202,19 +240,39 @@ let VideoTaskService = VideoTaskService_1 = class VideoTaskService {
         });
     }
     async handleCallback(body) {
-        const taskId = body.id;
-        if (!taskId) {
-            throw new Error('回调缺少 task id');
+        if (!body || typeof body !== 'object') {
+            throw new common_1.BadRequestException('回调内容必须是对象');
         }
-        await this.applyTaskUpdate(taskId, body);
+        const data = body;
+        const taskId = data.id;
+        if (typeof taskId !== 'string' || taskId.length === 0) {
+            throw new common_1.BadRequestException('回调缺少 task id');
+        }
+        if (typeof data.status !== 'string' || !TASK_STATUSES.includes(data.status)) {
+            throw new common_1.BadRequestException('回调任务状态无效');
+        }
+        const update = await this.applyTaskUpdate(taskId, data);
+        if (!update.changed) {
+            return { received: true, applied: false };
+        }
         const payload = {
             taskId,
-            status: body.status,
-            generatedVideoUrl: body.content?.video_url,
-            errorMessage: body.error?.message,
+            status: data.status,
+            generatedVideoUrl: data.content?.video_url,
+            errorMessage: data.error?.message,
         };
         await this.redis.publish('video-task-updates', JSON.stringify(payload));
-        return { received: true };
+        return { received: true, applied: true };
+    }
+    isValidCallbackToken(token) {
+        const expectedToken = this.configService.get('VIDEO_CALLBACK_TOKEN');
+        if (!token || !expectedToken) {
+            return false;
+        }
+        const tokenBuffer = Buffer.from(token);
+        const expectedBuffer = Buffer.from(expectedToken);
+        return tokenBuffer.length === expectedBuffer.length
+            && (0, crypto_1.timingSafeEqual)(tokenBuffer, expectedBuffer);
     }
     subscribeTaskStatus(taskId) {
         return new rxjs_1.Observable((subscriber) => {
@@ -242,26 +300,50 @@ let VideoTaskService = VideoTaskService_1 = class VideoTaskService {
             };
         });
     }
+    getCallbackUrl() {
+        const appBaseUrl = this.configService.get('APP_BASE_URL')?.replace(/\/+$/, '');
+        const callbackToken = this.configService.get('VIDEO_CALLBACK_TOKEN');
+        if (!appBaseUrl || !callbackToken) {
+            throw new Error('APP_BASE_URL 和 VIDEO_CALLBACK_TOKEN 必须配置，才能创建视频任务');
+        }
+        return `${appBaseUrl}/video/callback?token=${encodeURIComponent(callbackToken)}`;
+    }
     async applyTaskUpdate(taskId, data) {
         const task = await this.videoTaskRepo.findOne({ where: { taskId } });
         if (!task) {
             this.logger.warn(`回调任务不存在: ${taskId}`);
-            return;
+            return { changed: false };
         }
-        task.status = data.status;
-        task.volcResponse = JSON.stringify(data);
-        if (data.status === 'succeeded' && data.content) {
+        const incomingStatus = data.status;
+        if (TERMINAL_TASK_STATUSES.has(task.status) && task.status !== incomingStatus) {
+            this.logger.warn(`忽略终态任务的回调: ${taskId}, ${task.status} -> ${incomingStatus}`);
+            return { changed: false };
+        }
+        const currentOrder = TASK_STATUS_ORDER[task.status] ?? 0;
+        const incomingOrder = TASK_STATUS_ORDER[incomingStatus];
+        if (incomingOrder < currentOrder) {
+            this.logger.warn(`忽略乱序回调: ${taskId}, ${task.status} -> ${incomingStatus}`);
+            return { changed: false };
+        }
+        const response = JSON.stringify(data);
+        if (task.status === incomingStatus && task.volcResponse === response) {
+            return { changed: false };
+        }
+        task.status = incomingStatus;
+        task.volcResponse = response;
+        if (incomingStatus === 'succeeded' && data.content) {
             task.generatedVideoUrl = data.content.video_url;
             task.lastFrameUrl = data.content.last_frame_url;
             task.duration = data.duration;
             task.resolution = data.resolution;
             task.ratio = data.ratio;
         }
-        if (data.status === 'failed' && data.error) {
+        if (incomingStatus === 'failed' && data.error) {
             task.errorCode = data.error.code;
             task.errorMessage = data.error.message;
         }
         await this.videoTaskRepo.save(task);
+        return { changed: true };
     }
     async listRemoteTasks(params) {
         const { pageNum = 1, pageSize = 20, status, taskIds, model } = params || {};

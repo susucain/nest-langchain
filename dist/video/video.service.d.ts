@@ -29,6 +29,9 @@ export declare class VideoService {
     private handleProcessChunk;
     findHistoryBySessionId(sessionId: string): Promise<UIMessage[]>;
     private getRecentUIMessages;
+    private buildModelContext;
+    private getUIMessagesThroughId;
+    private createReferencedScriptMessage;
     private buildSystemPrompt;
     private saveUserMessage;
     private touchSession;
@@ -48,6 +51,7 @@ export declare class VideoService {
     deleteAsset(assetId: number): Promise<{
         success: boolean;
     }>;
+    updateAssetPurpose(assetId: number, assetPurpose: 'analysis' | 'reference'): Promise<VideoAsset>;
     findScriptsBySessionId(sessionId: string): Promise<VideoScript[]>;
     findScriptById(scriptId: number): Promise<VideoScript | null>;
     findSessionsByUserId(userId: number, options?: {

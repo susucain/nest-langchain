@@ -27,11 +27,21 @@ export declare class VideoController {
     deleteAsset(assetId: number): Promise<{
         success: boolean;
     }>;
+    updateAssetPurpose(assetId: number, body: {
+        asset_purpose: 'analysis' | 'reference';
+    }): Promise<import("./entities/video-asset.entity").VideoAsset>;
     getScripts(sessionId: string): Promise<import("./entities/video-script.entity").VideoScript[]>;
     getScriptDetail(scriptId: number): Promise<import("./entities/video-script.entity").VideoScript | null>;
     generateVideo(body: {
         script_id: number;
-        callback_url?: string;
+        session_id?: string;
+        user_id?: number;
+        user_prompt?: string;
+        assets?: Array<{
+            type: 'image' | 'video';
+            url: string;
+            name?: string;
+        }>;
     }): Promise<import("./entities/video-task.entity").VideoTask>;
     getVideoTask(taskId: string): Promise<import("./entities/video-task.entity").VideoTask | null>;
     streamTaskStatus(taskId: string): Observable<any>;
@@ -39,8 +49,9 @@ export declare class VideoController {
         success: boolean;
     }>;
     getVideoTaskList(sessionId: string): Promise<import("./entities/video-task.entity").VideoTask[]>;
-    handleCallback(body: any): Promise<{
+    handleCallback(body: any, token?: string): Promise<{
         received: boolean;
+        applied: boolean;
     }>;
     getSessions(userId?: number, page?: number, pageSize?: number): Promise<{
         items: import("./entities/video-session.entity").VideoSession[];

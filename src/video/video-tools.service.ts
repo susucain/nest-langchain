@@ -10,7 +10,6 @@ import { VideoScript } from './entities/video-script.entity';
 import { VideoSession } from './entities/video-session.entity';
 import { StoryboardParserService } from './storyboard-parser.service';
 import { VideoTaskService } from './video-task.service';
-import { ConfigService } from '@nestjs/config';
 
 interface ToolContext {
   sessionId: string;
@@ -35,11 +34,11 @@ export class VideoToolsService {
     private sessionRepo: Repository<VideoSession>,
     private storyboardParser: StoryboardParserService,
     private taskService: VideoTaskService,
-    private configService: ConfigService,
   ) {}
 
   buildTools(ctx: ToolContext) {
     return {
+      start_script_creation: this.buildStartScriptCreationTool(),
       read_file: this.buildReadFileTool(),
       write_file: this.buildWriteFileTool(),
       parse_asset: this.buildParseAssetTool(ctx),
@@ -47,6 +46,18 @@ export class VideoToolsService {
       generate_script: this.buildGenerateScriptTool(ctx),
       create_video_task: this.buildCreateVideoTaskTool(ctx),
     };
+  }
+
+  private buildStartScriptCreationTool() {
+    return tool({
+      description:
+        '开始一次分镜脚本创作流程。仅当用户明确要求生成、创作、重写或修改视频分镜脚本时调用，并且必须在解析创作素材、读取创作规范或生成脚本之前调用。普通问候、素材分析、商品画像更新、知识问答和视频生成任务不得调用。',
+      inputSchema: zodSchema(z.object({})),
+      execute: async () => ({
+        success: true,
+        message: '已开始分镜脚本创作流程',
+      }),
+    });
   }
 
   /** 将用户传入的相对路径解析为 skills 目录内的绝对路径，防止路径穿越 */
@@ -216,10 +227,6 @@ export class VideoToolsService {
           .filter((a) => a.assetType === 'video')
           .map((a) => a.url);
 
-        const callbackUrl = this.configService.get<string>('APP_BASE_URL')
-          ? `${this.configService.get<string>('APP_BASE_URL')}/video/callback`
-          : undefined;
-
         const task = await this.taskService.createTask({
           sessionId: ctx.sessionId,
           userId: ctx.userId,
@@ -227,7 +234,6 @@ export class VideoToolsService {
           prompt: script.seedancePrompt,
           imageUrls,
           videoUrls,
-          callbackUrl,
         });
 
         await this.scriptRepo.update({ id: script.id }, { status: 'used_for_video' });

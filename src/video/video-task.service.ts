@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { timingSafeEqual } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -16,6 +17,30 @@ interface TaskUpdatePayload {
   generatedVideoUrl?: string;
   errorMessage?: string;
 }
+
+interface GenerationAsset {
+  type: 'image' | 'video';
+  url: string;
+  name?: string;
+}
+
+interface CreateTaskByScriptOptions {
+  sessionId?: string;
+  userId?: number;
+  userPrompt?: string;
+  assets?: GenerationAsset[];
+}
+
+const TASK_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'expired', 'cancelled'] as const;
+const TERMINAL_TASK_STATUSES = new Set<string>(['succeeded', 'failed', 'expired', 'cancelled']);
+const TASK_STATUS_ORDER: Record<string, number> = {
+  queued: 0,
+  running: 1,
+  succeeded: 2,
+  failed: 2,
+  expired: 2,
+  cancelled: 2,
+};
 
 @Injectable()
 export class VideoTaskService {
@@ -90,7 +115,6 @@ export class VideoTaskService {
     prompt: string;
     imageUrls?: string[];
     videoUrls?: string[];
-    callbackUrl?: string;
     duration?: number;
     ratio?: string;
   }) {
@@ -119,9 +143,7 @@ export class VideoTaskService {
       resolution: '720p',
     };
 
-    if (params.callbackUrl) {
-      requestBody.callback_url = params.callbackUrl;
-    }
+    requestBody.callback_url = this.getCallbackUrl();
 
     this.logger.log(`创建视频生成任务: ${JSON.stringify(requestBody)}`);
 
@@ -164,10 +186,42 @@ export class VideoTaskService {
   /**
    * 通过脚本 ID 创建任务（Controller 调用）
    */
-  async createTaskByScriptId(scriptId: number, callbackUrl?: string) {
+  async createTaskByScriptId(scriptId: number, options: CreateTaskByScriptOptions = {}) {
     const script = await this.scriptRepo.findOne({ where: { id: scriptId } });
     if (!script) {
       throw new Error(`脚本不存在: ${scriptId}`);
+    }
+
+    if (options.sessionId && options.sessionId !== script.sessionId) {
+      throw new Error('脚本不属于当前会话');
+    }
+    if (options.userId && options.userId !== script.userId) {
+      throw new Error('无权使用该脚本生成视频');
+    }
+
+    const suppliedAssets = options.assets ?? [];
+    for (const asset of suppliedAssets) {
+      const existing = await this.assetRepo.findOne({
+        where: { sessionId: script.sessionId, userId: script.userId, url: asset.url },
+      });
+      if (existing) {
+        if (existing.assetPurpose !== 'reference') {
+          existing.assetPurpose = 'reference';
+          existing.status = 'parsed';
+          await this.assetRepo.save(existing);
+        }
+        continue;
+      }
+
+      await this.assetRepo.save(this.assetRepo.create({
+        sessionId: script.sessionId,
+        userId: script.userId,
+        assetType: asset.type,
+        assetPurpose: 'reference',
+        name: asset.name || '视频生成参考素材',
+        url: asset.url,
+        status: 'parsed',
+      }));
     }
 
     // 查询该会话下 reference 类型素材（达人形象照、环境照片、参考视频等）
@@ -181,18 +235,18 @@ export class VideoTaskService {
       .filter((a) => a.assetType === 'video')
       .map((a) => a.url);
 
-    const defaultCallback = this.configService.get<string>('APP_BASE_URL')
-      ? `${this.configService.get<string>('APP_BASE_URL')}/video/callback`
-      : undefined;
+    const userPrompt = options.userPrompt?.trim();
+    const prompt = userPrompt
+      ? `${script.seedancePrompt}\n\n## 本次生成补充要求\n${userPrompt}`
+      : script.seedancePrompt;
 
     return this.createTask({
       sessionId: script.sessionId,
       userId: script.userId,
       scriptId: script.id,
-      prompt: script.seedancePrompt,
-      imageUrls,
-      videoUrls,
-      callbackUrl: callbackUrl || defaultCallback,
+      prompt,
+      imageUrls: [...new Set(imageUrls)],
+      videoUrls: [...new Set(videoUrls)],
     });
   }
 
@@ -249,24 +303,47 @@ export class VideoTaskService {
   /**
    * 火山引擎回调
    */
-  async handleCallback(body: any) {
-    const taskId = body.id;
-    if (!taskId) {
-      throw new Error('回调缺少 task id');
+  async handleCallback(body: unknown) {
+    if (!body || typeof body !== 'object') {
+      throw new BadRequestException('回调内容必须是对象');
     }
 
-    await this.applyTaskUpdate(taskId, body);
+    const data = body as Record<string, any>;
+    const taskId = data.id;
+    if (typeof taskId !== 'string' || taskId.length === 0) {
+      throw new BadRequestException('回调缺少 task id');
+    }
+    if (typeof data.status !== 'string' || !TASK_STATUSES.includes(data.status as typeof TASK_STATUSES[number])) {
+      throw new BadRequestException('回调任务状态无效');
+    }
+
+    const update = await this.applyTaskUpdate(taskId, data);
+    if (!update.changed) {
+      return { received: true, applied: false };
+    }
 
     const payload: TaskUpdatePayload = {
       taskId,
-      status: body.status,
-      generatedVideoUrl: body.content?.video_url,
-      errorMessage: body.error?.message,
+      status: data.status,
+      generatedVideoUrl: data.content?.video_url,
+      errorMessage: data.error?.message,
     };
 
     await this.redis.publish('video-task-updates', JSON.stringify(payload));
 
-    return { received: true };
+    return { received: true, applied: true };
+  }
+
+  isValidCallbackToken(token?: string): boolean {
+    const expectedToken = this.configService.get<string>('VIDEO_CALLBACK_TOKEN');
+    if (!token || !expectedToken) {
+      return false;
+    }
+
+    const tokenBuffer = Buffer.from(token);
+    const expectedBuffer = Buffer.from(expectedToken);
+    return tokenBuffer.length === expectedBuffer.length
+      && timingSafeEqual(tokenBuffer, expectedBuffer);
   }
 
   /**
@@ -301,17 +378,45 @@ export class VideoTaskService {
     });
   }
 
-  private async applyTaskUpdate(taskId: string, data: any) {
+  private getCallbackUrl(): string {
+    const appBaseUrl = this.configService.get<string>('APP_BASE_URL')?.replace(/\/+$/, '');
+    const callbackToken = this.configService.get<string>('VIDEO_CALLBACK_TOKEN');
+    if (!appBaseUrl || !callbackToken) {
+      throw new Error('APP_BASE_URL 和 VIDEO_CALLBACK_TOKEN 必须配置，才能创建视频任务');
+    }
+
+    return `${appBaseUrl}/video/callback?token=${encodeURIComponent(callbackToken)}`;
+  }
+
+  private async applyTaskUpdate(taskId: string, data: Record<string, any>): Promise<{ changed: boolean }> {
     const task = await this.videoTaskRepo.findOne({ where: { taskId } });
     if (!task) {
       this.logger.warn(`回调任务不存在: ${taskId}`);
-      return;
+      return { changed: false };
     }
 
-    task.status = data.status;
-    task.volcResponse = JSON.stringify(data);
+    const incomingStatus = data.status;
+    if (TERMINAL_TASK_STATUSES.has(task.status) && task.status !== incomingStatus) {
+      this.logger.warn(`忽略终态任务的回调: ${taskId}, ${task.status} -> ${incomingStatus}`);
+      return { changed: false };
+    }
 
-    if (data.status === 'succeeded' && data.content) {
+    const currentOrder = TASK_STATUS_ORDER[task.status] ?? 0;
+    const incomingOrder = TASK_STATUS_ORDER[incomingStatus];
+    if (incomingOrder < currentOrder) {
+      this.logger.warn(`忽略乱序回调: ${taskId}, ${task.status} -> ${incomingStatus}`);
+      return { changed: false };
+    }
+
+    const response = JSON.stringify(data);
+    if (task.status === incomingStatus && task.volcResponse === response) {
+      return { changed: false };
+    }
+
+    task.status = incomingStatus;
+    task.volcResponse = response;
+
+    if (incomingStatus === 'succeeded' && data.content) {
       task.generatedVideoUrl = data.content.video_url;
       task.lastFrameUrl = data.content.last_frame_url;
       task.duration = data.duration;
@@ -319,12 +424,13 @@ export class VideoTaskService {
       task.ratio = data.ratio;
     }
 
-    if (data.status === 'failed' && data.error) {
+    if (incomingStatus === 'failed' && data.error) {
       task.errorCode = data.error.code;
       task.errorMessage = data.error.message;
     }
 
     await this.videoTaskRepo.save(task);
+    return { changed: true };
   }
 
   /**

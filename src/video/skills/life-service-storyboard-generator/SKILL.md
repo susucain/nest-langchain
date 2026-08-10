@@ -224,21 +224,6 @@ description: 生活服务视频分镜生成器，支持本地生活（团购/探
 6. **劣质营销检查**（仅当用户明确要求时）：如果用户在阶段 1 触发了劣质营销检查，则在此使用 `references/anti-low-quality-marketing.md` 中的 9 大检查清单逐项验证。
    - 如果发现任何劣质营销特征：**FAIL** -> 立即重写相关镜头，直到合规。
 
-### 阶段 3：保存文件
-
-**文件夹命名规则**：使用用户输入的**商家名**作为一级目录，使用**当前时间戳**作为二级目录，确保每次生成分镜都有独立的文件夹。
-
-保存路径：`src/video/skills/life-service-storyboard-generator/docs/storyboards/{商家名}/{YYYY-MM-DD_HH-mm-ss}/` (使用用户输入的商家名和当前时间)。
-
-**重要：必须使用并行工具调用一次性写入所有 3 个文件，不要逐个写入。** 在同一个 tool_calls 数组中同时调用 3 次 `write_file`，分别写入：
-- `storyboard.md` - 分镜脚本
-- `seedance_prompts.md` - Seedance 提示词
-- `meta.md` - 视频元数据
-
-**示例**：
-- 商家名："艾瑞嗨玩儿"，时间："2026-06-21_14-30-00" → 保存路径：`src/video/skills/life-service-storyboard-generator/docs/storyboards/艾瑞嗨玩儿/2026-06-21_14-30-00/`
-- 商家名："海底捞"，时间："2026-06-21_15-00-00" → 保存路径：`src/video/skills/life-service-storyboard-generator/docs/storyboards/海底捞/2026-06-21_15-00-00/`
-
 ## 📂 参考资产
 - **核心**：`references/type-configs.md`（5种视频类型完整配置）, `references/story-basics.md`（叙事模式+问题清单）, `references/character-prompts.md`
 - **视觉**：`references/camera-guide.md`（运镜+构图完整指南）

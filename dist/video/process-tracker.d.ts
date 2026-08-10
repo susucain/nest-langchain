@@ -3,6 +3,8 @@ export declare class ProcessTracker {
     private state;
     private writer;
     private productProfile?;
+    private started;
+    private finished;
     private hasGenerationActivity;
     private now;
     constructor(options: {

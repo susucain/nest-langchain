@@ -62,6 +62,8 @@ class ProcessTracker {
     state;
     writer;
     productProfile;
+    started = false;
+    finished = false;
     hasGenerationActivity = false;
     now = () => Date.now();
     constructor(options) {
@@ -138,13 +140,27 @@ class ProcessTracker {
         return parts.join(' · ') || '预计 30 秒 · 9:16 竖版';
     }
     start() {
+        if (this.started || this.finished)
+            return;
+        this.started = true;
+        const startTime = this.now();
+        this.state.status = 'running';
+        this.state.startTime = startTime;
+        this.state.phases.forEach((phase) => {
+            if (phase.status === 'running')
+                phase.startTime = startTime;
+        });
         this.emit();
         this.markPhaseDone('load-guidelines');
     }
     recordActivity() {
+        if (!this.started || this.finished)
+            return;
         this.hasGenerationActivity = true;
     }
     markAssetRunning(assetId) {
+        if (!this.started || this.finished)
+            return;
         this.hasGenerationActivity = true;
         const phase = this.state.phases.find((p) => p.id === 'parse-materials');
         if (!phase?.items)
@@ -155,6 +171,8 @@ class ProcessTracker {
         this.emit();
     }
     markAssetParsed(assetId, summary) {
+        if (!this.started || this.finished)
+            return;
         this.hasGenerationActivity = true;
         const phase = this.state.phases.find((p) => p.id === 'parse-materials');
         if (!phase?.items)
@@ -173,6 +191,8 @@ class ProcessTracker {
         }
     }
     markProfileRunning() {
+        if (!this.started || this.finished)
+            return;
         this.hasGenerationActivity = true;
         const phase = this.state.phases.find((p) => p.id === 'generate-script');
         if (!phase?.actions)
@@ -183,6 +203,8 @@ class ProcessTracker {
         this.emit();
     }
     markProfileUpdated(profile) {
+        if (!this.started || this.finished)
+            return;
         this.hasGenerationActivity = true;
         if (profile) {
             this.productProfile = { ...(this.productProfile || {}), ...profile };
@@ -205,6 +227,8 @@ class ProcessTracker {
         this.emit();
     }
     markGenerating() {
+        if (!this.started || this.finished)
+            return;
         this.hasGenerationActivity = true;
         const phase = this.state.phases.find((p) => p.id === 'generate-script');
         if (!phase?.actions)
@@ -215,6 +239,8 @@ class ProcessTracker {
         this.emit();
     }
     markScriptGenerated(result) {
+        if (!this.started || this.finished)
+            return;
         this.hasGenerationActivity = true;
         const phase = this.state.phases.find((p) => p.id === 'generate-script');
         if (!phase)
@@ -242,6 +268,9 @@ class ProcessTracker {
         this.markPhaseDone('generate-script');
     }
     finish() {
+        if (!this.started || this.finished)
+            return;
+        this.finished = true;
         if (!this.hasGenerationActivity) {
             this.state.status = 'skipped';
             this.state.endTime = this.now();
@@ -259,6 +288,9 @@ class ProcessTracker {
         this.emit();
     }
     error(message) {
+        if (!this.started || this.finished)
+            return;
+        this.finished = true;
         this.state.status = 'error';
         this.state.endTime = this.now();
         this.state.phases.forEach((phase) => {

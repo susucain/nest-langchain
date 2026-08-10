@@ -58,27 +58,25 @@ const video_script_entity_1 = require("./entities/video-script.entity");
 const video_session_entity_1 = require("./entities/video-session.entity");
 const storyboard_parser_service_1 = require("./storyboard-parser.service");
 const video_task_service_1 = require("./video-task.service");
-const config_1 = require("@nestjs/config");
 let VideoToolsService = class VideoToolsService {
     assetRepo;
     scriptRepo;
     sessionRepo;
     storyboardParser;
     taskService;
-    configService;
     skillsDir = process.env.SKILLS_DIR
         ? path.resolve(process.env.SKILLS_DIR)
         : path.resolve(process.cwd(), 'src/video/skills');
-    constructor(assetRepo, scriptRepo, sessionRepo, storyboardParser, taskService, configService) {
+    constructor(assetRepo, scriptRepo, sessionRepo, storyboardParser, taskService) {
         this.assetRepo = assetRepo;
         this.scriptRepo = scriptRepo;
         this.sessionRepo = sessionRepo;
         this.storyboardParser = storyboardParser;
         this.taskService = taskService;
-        this.configService = configService;
     }
     buildTools(ctx) {
         return {
+            start_script_creation: this.buildStartScriptCreationTool(),
             read_file: this.buildReadFileTool(),
             write_file: this.buildWriteFileTool(),
             parse_asset: this.buildParseAssetTool(ctx),
@@ -86,6 +84,16 @@ let VideoToolsService = class VideoToolsService {
             generate_script: this.buildGenerateScriptTool(ctx),
             create_video_task: this.buildCreateVideoTaskTool(ctx),
         };
+    }
+    buildStartScriptCreationTool() {
+        return (0, ai_1.tool)({
+            description: '开始一次分镜脚本创作流程。仅当用户明确要求生成、创作、重写或修改视频分镜脚本时调用，并且必须在解析创作素材、读取创作规范或生成脚本之前调用。普通问候、素材分析、商品画像更新、知识问答和视频生成任务不得调用。',
+            inputSchema: (0, ai_1.zodSchema)(v4_1.z.object({})),
+            execute: async () => ({
+                success: true,
+                message: '已开始分镜脚本创作流程',
+            }),
+        });
     }
     resolveSkillPath(relativePath) {
         const normalized = path.normalize(relativePath);
@@ -232,9 +240,6 @@ let VideoToolsService = class VideoToolsService {
                 const videoUrls = referenceAssets
                     .filter((a) => a.assetType === 'video')
                     .map((a) => a.url);
-                const callbackUrl = this.configService.get('APP_BASE_URL')
-                    ? `${this.configService.get('APP_BASE_URL')}/video/callback`
-                    : undefined;
                 const task = await this.taskService.createTask({
                     sessionId: ctx.sessionId,
                     userId: ctx.userId,
@@ -242,7 +247,6 @@ let VideoToolsService = class VideoToolsService {
                     prompt: script.seedancePrompt,
                     imageUrls,
                     videoUrls,
-                    callbackUrl,
                 });
                 await this.scriptRepo.update({ id: script.id }, { status: 'used_for_video' });
                 await this.sessionRepo.update({ sessionId: ctx.sessionId }, { status: 'video_generating' });
@@ -274,7 +278,6 @@ exports.VideoToolsService = VideoToolsService = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         storyboard_parser_service_1.StoryboardParserService,
-        video_task_service_1.VideoTaskService,
-        config_1.ConfigService])
+        video_task_service_1.VideoTaskService])
 ], VideoToolsService);
 //# sourceMappingURL=video-tools.service.js.map

@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Delete, Body, Res, Param, Query, Sse } from '@nestjs/common';
+import { BadRequestException, Controller, Post, Get, Delete, Patch, Body, Res, Param, Query, Sse, UnauthorizedException } from '@nestjs/common';
 import { VideoService } from './video.service';
 import { VideoTaskService } from './video-task.service';
 import { pipeUIMessageStreamToResponse } from 'ai';
@@ -68,6 +68,17 @@ export class VideoController {
     return this.videoService.deleteAsset(assetId);
   }
 
+  @Patch('assets/:assetId')
+  async updateAssetPurpose(
+    @Param('assetId') assetId: number,
+    @Body() body: { asset_purpose: 'analysis' | 'reference' },
+  ) {
+    if (body.asset_purpose !== 'analysis' && body.asset_purpose !== 'reference') {
+      throw new BadRequestException('asset_purpose 必须为 analysis 或 reference');
+    }
+    return this.videoService.updateAssetPurpose(assetId, body.asset_purpose);
+  }
+
   @Get('scripts/:sessionId')
   async getScripts(@Param('sessionId') sessionId: string) {
     return this.videoService.findScriptsBySessionId(sessionId);
@@ -82,10 +93,22 @@ export class VideoController {
   async generateVideo(
     @Body() body: {
       script_id: number;
-      callback_url?: string;
+      session_id?: string;
+      user_id?: number;
+      user_prompt?: string;
+      assets?: Array<{
+        type: 'image' | 'video';
+        url: string;
+        name?: string;
+      }>;
     },
   ) {
-    return this.videoTaskService.createTaskByScriptId(body.script_id, body.callback_url);
+    return this.videoTaskService.createTaskByScriptId(body.script_id, {
+      sessionId: body.session_id,
+      userId: body.user_id,
+      userPrompt: body.user_prompt,
+      assets: body.assets,
+    });
   }
 
   @Get('generate/:taskId')
@@ -112,7 +135,12 @@ export class VideoController {
   @Post('callback')
   async handleCallback(
     @Body() body: any,
+    @Query('token') token?: string,
   ) {
+    if (!this.videoTaskService.isValidCallbackToken(token)) {
+      throw new UnauthorizedException('无效的回调来源');
+    }
+
     return this.videoTaskService.handleCallback(body);
   }
 

@@ -72,6 +72,8 @@ export class ProcessTracker {
   private state: ProcessState;
   private writer: { write: (chunk: any) => void };
   private productProfile?: Record<string, any> | null;
+  private started = false;
+  private finished = false;
   private hasGenerationActivity = false;
   private now = () => Date.now();
 
@@ -161,6 +163,14 @@ export class ProcessTracker {
 
   /** 开始追踪，立即推送初始状态 */
   start() {
+    if (this.started || this.finished) return;
+    this.started = true;
+    const startTime = this.now();
+    this.state.status = 'running';
+    this.state.startTime = startTime;
+    this.state.phases.forEach((phase) => {
+      if (phase.status === 'running') phase.startTime = startTime;
+    });
     this.emit();
     // 阶段 2 在 Skill 加载完成后即完成
     this.markPhaseDone('load-guidelines');
@@ -168,11 +178,13 @@ export class ProcessTracker {
 
   /** 记录非状态变更的创作流程活动（如 read_file / write_file） */
   recordActivity() {
+    if (!this.started || this.finished) return;
     this.hasGenerationActivity = true;
   }
 
   /** 标记某个素材正在解析中 */
   markAssetRunning(assetId: number) {
+    if (!this.started || this.finished) return;
     this.hasGenerationActivity = true;
     const phase = this.state.phases.find((p) => p.id === 'parse-materials');
     if (!phase?.items) return;
@@ -183,6 +195,7 @@ export class ProcessTracker {
 
   /** 标记素材解析完成 */
   markAssetParsed(assetId: number, summary: string) {
+    if (!this.started || this.finished) return;
     this.hasGenerationActivity = true;
     const phase = this.state.phases.find((p) => p.id === 'parse-materials');
     if (!phase?.items) return;
@@ -201,6 +214,7 @@ export class ProcessTracker {
 
   /** 标记产品画像正在更新 */
   markProfileRunning() {
+    if (!this.started || this.finished) return;
     this.hasGenerationActivity = true;
     const phase = this.state.phases.find((p) => p.id === 'generate-script');
     if (!phase?.actions) return;
@@ -211,6 +225,7 @@ export class ProcessTracker {
 
   /** 标记产品画像更新完成 */
   markProfileUpdated(profile?: Record<string, any>) {
+    if (!this.started || this.finished) return;
     this.hasGenerationActivity = true;
     if (profile) {
       this.productProfile = { ...(this.productProfile || {}), ...profile };
@@ -235,6 +250,7 @@ export class ProcessTracker {
 
   /** 标记正在生成分镜脚本 */
   markGenerating() {
+    if (!this.started || this.finished) return;
     this.hasGenerationActivity = true;
     const phase = this.state.phases.find((p) => p.id === 'generate-script');
     if (!phase?.actions) return;
@@ -249,6 +265,7 @@ export class ProcessTracker {
     shot_count: number;
     version: number;
   }) {
+    if (!this.started || this.finished) return;
     this.hasGenerationActivity = true;
     const phase = this.state.phases.find((p) => p.id === 'generate-script');
     if (!phase) return;
@@ -279,6 +296,8 @@ export class ProcessTracker {
 
   /** 流正常结束 */
   finish() {
+    if (!this.started || this.finished) return;
+    this.finished = true;
     if (!this.hasGenerationActivity) {
       this.state.status = 'skipped';
       this.state.endTime = this.now();
@@ -299,6 +318,8 @@ export class ProcessTracker {
 
   /** 流异常结束 */
   error(message?: string) {
+    if (!this.started || this.finished) return;
+    this.finished = true;
     this.state.status = 'error';
     this.state.endTime = this.now();
     this.state.phases.forEach((phase) => {

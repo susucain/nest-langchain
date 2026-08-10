@@ -5,6 +5,17 @@ import { Observable } from 'rxjs';
 import { VideoTask } from './entities/video-task.entity';
 import { VideoScript } from './entities/video-script.entity';
 import { VideoAsset } from './entities/video-asset.entity';
+interface GenerationAsset {
+    type: 'image' | 'video';
+    url: string;
+    name?: string;
+}
+interface CreateTaskByScriptOptions {
+    sessionId?: string;
+    userId?: number;
+    userPrompt?: string;
+    assets?: GenerationAsset[];
+}
 export declare class VideoTaskService {
     private videoTaskRepo;
     private scriptRepo;
@@ -27,20 +38,22 @@ export declare class VideoTaskService {
         prompt: string;
         imageUrls?: string[];
         videoUrls?: string[];
-        callbackUrl?: string;
         duration?: number;
         ratio?: string;
     }): Promise<VideoTask>;
-    createTaskByScriptId(scriptId: number, callbackUrl?: string): Promise<VideoTask>;
+    createTaskByScriptId(scriptId: number, options?: CreateTaskByScriptOptions): Promise<VideoTask>;
     queryTask(taskId: string): Promise<VideoTask | null>;
     cancelOrDeleteTask(taskId: string): Promise<{
         success: boolean;
     }>;
     findBySessionId(sessionId: string): Promise<VideoTask[]>;
-    handleCallback(body: any): Promise<{
+    handleCallback(body: unknown): Promise<{
         received: boolean;
+        applied: boolean;
     }>;
+    isValidCallbackToken(token?: string): boolean;
     subscribeTaskStatus(taskId: string): Observable<any>;
+    private getCallbackUrl;
     private applyTaskUpdate;
     listRemoteTasks(params?: {
         pageNum?: number;
@@ -50,3 +63,4 @@ export declare class VideoTaskService {
         model?: string;
     }): Promise<any>;
 }
+export {};

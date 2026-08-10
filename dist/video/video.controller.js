@@ -55,6 +55,12 @@ let VideoController = class VideoController {
     async deleteAsset(assetId) {
         return this.videoService.deleteAsset(assetId);
     }
+    async updateAssetPurpose(assetId, body) {
+        if (body.asset_purpose !== 'analysis' && body.asset_purpose !== 'reference') {
+            throw new common_1.BadRequestException('asset_purpose 必须为 analysis 或 reference');
+        }
+        return this.videoService.updateAssetPurpose(assetId, body.asset_purpose);
+    }
     async getScripts(sessionId) {
         return this.videoService.findScriptsBySessionId(sessionId);
     }
@@ -62,7 +68,12 @@ let VideoController = class VideoController {
         return this.videoService.findScriptById(scriptId);
     }
     async generateVideo(body) {
-        return this.videoTaskService.createTaskByScriptId(body.script_id, body.callback_url);
+        return this.videoTaskService.createTaskByScriptId(body.script_id, {
+            sessionId: body.session_id,
+            userId: body.user_id,
+            userPrompt: body.user_prompt,
+            assets: body.assets,
+        });
     }
     async getVideoTask(taskId) {
         return this.videoTaskService.queryTask(taskId);
@@ -76,7 +87,10 @@ let VideoController = class VideoController {
     async getVideoTaskList(sessionId) {
         return this.videoTaskService.findBySessionId(sessionId);
     }
-    async handleCallback(body) {
+    async handleCallback(body, token) {
+        if (!this.videoTaskService.isValidCallbackToken(token)) {
+            throw new common_1.UnauthorizedException('无效的回调来源');
+        }
         return this.videoTaskService.handleCallback(body);
     }
     async getSessions(userId, page, pageSize) {
@@ -132,6 +146,14 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], VideoController.prototype, "deleteAsset", null);
 __decorate([
+    (0, common_1.Patch)('assets/:assetId'),
+    __param(0, (0, common_1.Param)('assetId')),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object]),
+    __metadata("design:returntype", Promise)
+], VideoController.prototype, "updateAssetPurpose", null);
+__decorate([
     (0, common_1.Get)('scripts/:sessionId'),
     __param(0, (0, common_1.Param)('sessionId')),
     __metadata("design:type", Function),
@@ -184,8 +206,9 @@ __decorate([
 __decorate([
     (0, common_1.Post)('callback'),
     __param(0, (0, common_1.Body)()),
+    __param(1, (0, common_1.Query)('token')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], VideoController.prototype, "handleCallback", null);
 __decorate([
