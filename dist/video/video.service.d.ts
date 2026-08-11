@@ -4,6 +4,7 @@ import { VideoSession } from './entities/video-session.entity';
 import { VideoMessage } from './entities/video-message.entity';
 import { VideoAsset } from './entities/video-asset.entity';
 import { VideoScript } from './entities/video-script.entity';
+import { VideoTask } from './entities/video-task.entity';
 import { VideoLLMService } from './video-llm.service';
 import { SkillLoaderService } from './skill-loader.service';
 import { StoryboardParserService } from './storyboard-parser.service';
@@ -14,13 +15,14 @@ export declare class VideoService {
     private messageRepo;
     private assetRepo;
     private scriptRepo;
+    private taskRepo;
     private llmService;
     private skillLoader;
     private storyboardParser;
     private toolsService;
     private taskService;
     private readonly logger;
-    constructor(sessionRepo: Repository<VideoSession>, messageRepo: Repository<VideoMessage>, assetRepo: Repository<VideoAsset>, scriptRepo: Repository<VideoScript>, llmService: VideoLLMService, skillLoader: SkillLoaderService, storyboardParser: StoryboardParserService, toolsService: VideoToolsService, taskService: VideoTaskService);
+    constructor(sessionRepo: Repository<VideoSession>, messageRepo: Repository<VideoMessage>, assetRepo: Repository<VideoAsset>, scriptRepo: Repository<VideoScript>, taskRepo: Repository<VideoTask>, llmService: VideoLLMService, skillLoader: SkillLoaderService, storyboardParser: StoryboardParserService, toolsService: VideoToolsService, taskService: VideoTaskService);
     ensureSession(sessionId: string, userId?: number): Promise<VideoSession>;
     streamChat(sessionId: string, messages: UIMessage[], options?: {
         referencedScriptId?: number;
@@ -47,6 +49,7 @@ export declare class VideoService {
         name: string;
         url: string;
         thumbnail_url?: string;
+        duration_sec?: number;
     }): Promise<VideoAsset>;
     findAssetsBySessionId(sessionId: string): Promise<VideoAsset[]>;
     deleteAsset(assetId: number): Promise<{

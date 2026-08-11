@@ -31,6 +31,15 @@ interface CreateTaskByScriptOptions {
   assets?: GenerationAsset[];
 }
 
+interface FullVideoEditMeta {
+  mode: 'full_video_edit';
+  sourceAssetId: number;
+  sourceDurationSec: number;
+  targetStartSec: number;
+  targetEndSec: number;
+  preserveAudio: boolean;
+}
+
 const TASK_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'expired', 'cancelled'] as const;
 const TERMINAL_TASK_STATUSES = new Set<string>(['succeeded', 'failed', 'expired', 'cancelled']);
 const TASK_STATUS_ORDER: Record<string, number> = {
@@ -224,16 +233,21 @@ export class VideoTaskService {
       }));
     }
 
+    const fullVideoEdit = await this.resolveFullVideoEdit(script);
     // 查询该会话下 reference 类型素材（达人形象照、环境照片、参考视频等）
     const referenceAssets = await this.assetRepo.find({
       where: { sessionId: script.sessionId, assetPurpose: 'reference' },
     });
-    const imageUrls = referenceAssets
-      .filter((a) => a.assetType === 'image')
-      .map((a) => a.url);
-    const videoUrls = referenceAssets
-      .filter((a) => a.assetType === 'video')
-      .map((a) => a.url);
+    const imageUrls = fullVideoEdit
+      ? []
+      : referenceAssets
+        .filter((a) => a.assetType === 'image')
+        .map((a) => a.url);
+    const videoUrls = fullVideoEdit
+      ? [fullVideoEdit.sourceUrl]
+      : referenceAssets
+        .filter((a) => a.assetType === 'video')
+        .map((a) => a.url);
 
     const userPrompt = options.userPrompt?.trim();
     const prompt = userPrompt
@@ -247,7 +261,49 @@ export class VideoTaskService {
       prompt,
       imageUrls: [...new Set(imageUrls)],
       videoUrls: [...new Set(videoUrls)],
+      duration: fullVideoEdit?.sourceDurationSec,
+      ratio: fullVideoEdit?.ratio,
     });
+  }
+
+  private async resolveFullVideoEdit(script: VideoScript): Promise<{
+    sourceUrl: string;
+    sourceDurationSec: number;
+    ratio: string;
+  } | null> {
+    const edit = script.meta?.edit as FullVideoEditMeta | undefined;
+    if (!edit || edit.mode !== 'full_video_edit') {
+      return null;
+    }
+
+    if (!Number.isInteger(edit.sourceAssetId)
+      || !Number.isFinite(edit.sourceDurationSec)
+      || edit.sourceDurationSec <= 0
+      || !Number.isFinite(edit.targetStartSec)
+      || !Number.isFinite(edit.targetEndSec)
+      || edit.targetStartSec < 0
+      || edit.targetStartSec >= edit.targetEndSec
+      || edit.targetEndSec > edit.sourceDurationSec) {
+      throw new BadRequestException('完整视频编辑脚本的编辑参数无效');
+    }
+
+    const sourceAsset = await this.assetRepo.findOne({
+      where: {
+        id: edit.sourceAssetId,
+        sessionId: script.sessionId,
+        userId: script.userId,
+        assetType: 'video',
+      },
+    });
+    if (!sourceAsset) {
+      throw new BadRequestException('完整视频编辑的原视频素材不存在或无权访问');
+    }
+
+    return {
+      sourceUrl: sourceAsset.url,
+      sourceDurationSec: edit.sourceDurationSec,
+      ratio: typeof script.meta?.ratio === 'string' ? script.meta.ratio : '9:16',
+    };
   }
 
   /**

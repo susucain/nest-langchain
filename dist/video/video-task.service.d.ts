@@ -42,6 +42,7 @@ export declare class VideoTaskService {
         ratio?: string;
     }): Promise<VideoTask>;
     createTaskByScriptId(scriptId: number, options?: CreateTaskByScriptOptions): Promise<VideoTask>;
+    private resolveFullVideoEdit;
     queryTask(taskId: string): Promise<VideoTask | null>;
     cancelOrDeleteTask(taskId: string): Promise<{
         success: boolean;

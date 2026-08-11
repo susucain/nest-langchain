@@ -53,6 +53,7 @@ export class VideoController {
       name: string;
       url: string;
       thumbnail_url?: string;
+      duration_sec?: number;
     },
   ) {
     return this.videoService.createAsset(body);

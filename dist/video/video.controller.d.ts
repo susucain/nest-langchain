@@ -22,6 +22,7 @@ export declare class VideoController {
         name: string;
         url: string;
         thumbnail_url?: string;
+        duration_sec?: number;
     }): Promise<import("./entities/video-asset.entity").VideoAsset>;
     getAssets(sessionId: string): Promise<import("./entities/video-asset.entity").VideoAsset[]>;
     deleteAsset(assetId: number): Promise<{

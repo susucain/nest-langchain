@@ -16,6 +16,7 @@ import { VideoSession } from './entities/video-session.entity';
 import { VideoMessage } from './entities/video-message.entity';
 import { VideoAsset } from './entities/video-asset.entity';
 import { VideoScript } from './entities/video-script.entity';
+import { VideoTask } from './entities/video-task.entity';
 import { VideoLLMService } from './video-llm.service';
 import { SkillLoaderService } from './skill-loader.service';
 import { StoryboardParserService } from './storyboard-parser.service';
@@ -39,6 +40,8 @@ export class VideoService {
     private assetRepo: Repository<VideoAsset>,
     @InjectRepository(VideoScript)
     private scriptRepo: Repository<VideoScript>,
+    @InjectRepository(VideoTask)
+    private taskRepo: Repository<VideoTask>,
     private llmService: VideoLLMService,
     private skillLoader: SkillLoaderService,
     private storyboardParser: StoryboardParserService,
@@ -101,6 +104,7 @@ export class VideoService {
               asset_purpose: part.purpose === 'reference' ? 'reference' : 'analysis',
               name: part.filename ?? '附件素材',
               url: part.url,
+              duration_sec: typeof part.durationSec === 'number' ? part.durationSec : undefined,
             });
           }),
         );
@@ -414,13 +418,33 @@ export class VideoService {
   private async buildSystemPrompt(
     session: VideoSession,
   ): Promise<string> {
-    const [skillMeta, assets] = await Promise.all([
+    const [skillMeta, assets, latestScript, activeTask] = await Promise.all([
       this.skillLoader.loadMeta(),
       this.assetRepo.find({ where: { sessionId: session.sessionId }, order: { createdAt: 'ASC' } }),
+      this.scriptRepo.findOne({
+        where: { sessionId: session.sessionId, userId: session.userId },
+        order: { version: 'DESC' },
+      }),
+      this.taskRepo.findOne({
+        where: { sessionId: session.sessionId, userId: session.userId, status: 'running' },
+        order: { updatedAt: 'DESC' },
+      }),
     ]);
+    const latestTask = activeTask ?? await this.taskRepo.findOne({
+      where: { sessionId: session.sessionId, userId: session.userId },
+      order: { updatedAt: 'DESC' },
+    });
 
     let prompt = `你是映语 AI 达人带货视频工作台。帮助用户为商品生成带货视频分镜脚本，并支持一键生成视频。\n`;
     prompt += `当前会话 ID：${session.sessionId}\n`;
+    prompt += `当前会话状态：${session.status}\n`;
+
+    if (latestScript) {
+      prompt += `最新脚本：ID ${latestScript.id}，V${latestScript.version}，${latestScript.title}，状态 ${latestScript.status}\n`;
+    }
+    if (latestTask) {
+      prompt += `最近视频任务：${latestTask.taskId}，状态 ${latestTask.status}，关联脚本 ID ${latestTask.scriptId ?? '无'}\n`;
+    }
 
     if (session.productProfile && Object.keys(session.productProfile).length > 0) {
       prompt += `\n## 商品画像\n${JSON.stringify(session.productProfile, null, 2)}\n`;
@@ -432,7 +456,10 @@ export class VideoService {
         const summary = asset.assetPurpose === 'analysis'
           ? (asset.parsedContent?.summary || '待解析（可调用 parse_asset 解析，asset_id 见 # 编号）')
           : asset.url;
-        prompt += `[${asset.assetPurpose}] #${asset.id} ${asset.assetType} - ${asset.name}: ${summary}\n`;
+        const duration = asset.assetType === 'video' && typeof asset.parsedContent?.durationSec === 'number'
+          ? `，时长 ${asset.parsedContent.durationSec} 秒`
+          : '';
+        prompt += `[${asset.assetPurpose}] #${asset.id} ${asset.assetType} - ${asset.name}${duration}: ${summary}\n`;
       }
     }
 
@@ -445,13 +472,14 @@ export class VideoService {
     prompt += `**按需读取**：只读取当前任务真正需要的文件，不要一次性读取所有文件。\n`;
 
     prompt += `\n## 输出约定（必须严格遵守）\n`;
-    prompt += `1. 收到请求后先判断用户是否明确要求生成、创作、重写或修改视频分镜脚本。只有确定要执行脚本创作时，才调用 start_script_creation，并且必须在 parse_asset、read_file、write_file、update_product_profile、generate_script 等创作步骤之前调用。普通问候、单独分析素材、单独更新商品画像、知识问答和生成视频不得调用 start_script_creation。\n`;
-    prompt += `2. 当你分析完素材并准备好分镜脚本后，**必须**调用 generate_script 工具保存结果。工具参数包括：title、storyboard_markdown、seedance_prompt、meta。禁止在对话文本中输出完整的分镜脚本或 Seedance 提示词。\n`;
+    prompt += `1. 收到请求后先判断修改对象。用户修改已有分镜脚本、重写某镜头或重制未生成视频时，使用脚本重写模式，生成完整新脚本。用户已经拥有一条视频、只要求修改其中某时间段并输出完整修改后视频时，使用完整视频编辑模式：原视频是编辑输入，不得重写整条创作分镜，也不得将修改区间作为输出时长。两种模式都属于脚本创作，必须先调用 start_script_creation；普通问候、单独分析素材、单独更新商品画像、知识问答和已确认脚本的视频生成任务不得调用该工具。\n`;
+    prompt += `2. 当你准备好结果后，**必须**调用 generate_script 工具保存。脚本重写模式保存完整 storyboard_markdown 和完整 seedance_prompt。完整视频编辑模式保存一个可解析的视频编辑任务 storyboard_markdown，以及基于输入视频的局部编辑 seedance_prompt；该提示词必须写明输出总时长等于原视频完整时长、修改范围、未修改范围严格保持原视频不变和连续性要求。完整视频编辑模式的 meta.edit 必须包含 mode=full_video_edit、sourceAssetId、sourceDurationSec、targetStartSec、targetEndSec、preserveAudio。若素材中缺少原视频时长，先向用户询问，不得猜测。创作完成时不得只在对话中输出提示词，必须先保存脚本。用户确认该脚本后，才能调用 create_video_task 生成视频。工具参数包括：title、storyboard_markdown、seedance_prompt、meta。除非用户明确要求查看已保存脚本的内容或 Seedance 提示词，否则禁止在对话文本中输出完整分镜脚本或 Seedance 提示词。\n`;
     prompt += `3. storyboard_markdown 必须严格遵循 Skill 中的分镜脚本格式，每个镜头使用如下格式（示例）：\n`;
     prompt += `### 镜头 1：福利钩子 (0s - 3s)\n- **画面描述**：手持红色手牌，镜头从手牌快速拉远露出店内环境。\n- **旁白**：今天这家火锅套餐，人均不到五十！\n`;
     prompt += `4. seedance_prompt 必须严格遵循 Skill 中的 Seedance 2.0 提示词格式。\n`;
     prompt += `5. 当用户提供了商品名称、卖点、目标人群、时长、平台、风格等信息时，及时调用 update_product_profile 工具更新商品画像。\n`;
-    prompt += `6. 最终回复保持简洁，只给用户一个自然的中文确认即可，例如"脚本已生成，你可以查看下方的分镜卡片"。\n`;
+    prompt += `6. 用户询问已保存的脚本、历史版本、分镜内容或 Seedance 2.0 提示词时，先调用 get_script；需要在多个版本中选择时先调用 list_scripts。用户询问视频生成状态、结果视频或失败原因时，先调用 get_video_task_status。用户询问当前进度、会话状态或当前上下文时，先调用 get_session_state。不得根据对话历史猜测这些持久化数据。\n`;
+    prompt += `7. 最终回复保持简洁，只给用户一个自然的中文确认即可，例如"脚本已生成，你可以查看下方的分镜卡片"。\n`;
 
     return prompt;
   }
@@ -534,6 +562,7 @@ export class VideoService {
     name: string;
     url: string;
     thumbnail_url?: string;
+    duration_sec?: number;
   }) {
     const session = await this.ensureSession(body.session_id, body.user_id);
 
@@ -542,6 +571,10 @@ export class VideoService {
       where: { sessionId: body.session_id, userId: session.userId, url: body.url },
     });
     if (existing) {
+      if (body.asset_type === 'video' && typeof body.duration_sec === 'number' && body.duration_sec > 0) {
+        existing.parsedContent = { ...(existing.parsedContent || {}), durationSec: body.duration_sec };
+        return this.assetRepo.save(existing);
+      }
       return existing;
     }
 
@@ -553,6 +586,9 @@ export class VideoService {
       name: body.name,
       url: body.url,
       thumbnailUrl: body.thumbnail_url,
+      parsedContent: body.asset_type === 'video' && typeof body.duration_sec === 'number' && body.duration_sec > 0
+        ? { durationSec: body.duration_sec }
+        : undefined,
       status: body.asset_purpose === 'reference' ? 'parsed' : 'pending',
     });
     return this.assetRepo.save(asset);
