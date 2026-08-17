@@ -8,7 +8,6 @@ import {
 } from 'typeorm';
 
 @Entity('video_sessions')
-@Index(['sessionId'], { unique: true })
 @Index('idx_video_sessions_user_updated_id', ['userId', 'updatedAt', 'id'])
 export class VideoSession {
   @PrimaryGeneratedColumn({ comment: '主键ID' })

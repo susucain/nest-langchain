@@ -52,6 +52,12 @@ previous_image=""
 if [[ -f "${DEPLOY_ENV}" ]]; then
   previous_image="$(sed -n 's/^BACKEND_IMAGE=//p' "${DEPLOY_ENV}" | head -n 1)"
 fi
+if [[ -z "${previous_image}" ]]; then
+  previous_image="$(
+    docker inspect langchain-prod-nest-app \
+      --format '{{.Config.Image}}' 2>/dev/null || true
+  )"
+fi
 
 write_deploy_env() {
   local image="$1"
