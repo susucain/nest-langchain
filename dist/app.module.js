@@ -5,9 +5,6 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
@@ -30,7 +27,6 @@ const speech_module_1 = require("./speech/speech.module");
 const event_emitter_1 = require("@nestjs/event-emitter");
 const oss_module_1 = require("./oss/oss.module");
 const bull_1 = require("@nestjs/bull");
-const ioredis_1 = __importDefault(require("ioredis"));
 const oss_entity_1 = require("./oss/entities/oss.entity");
 const video_module_1 = require("./video/video.module");
 const video_session_entity_1 = require("./video/entities/video-session.entity");
@@ -91,14 +87,25 @@ exports.AppModule = AppModule = __decorate([
                 inject: [config_1.ConfigService],
                 useFactory: (configService) => {
                     const redisUrl = configService.get('REDIS_URL');
-                    const redis = redisUrl
-                        ? new ioredis_1.default(redisUrl)
-                        : new ioredis_1.default({
-                            host: configService.get('REDIS_HOST') || 'localhost',
-                            port: Number(configService.get('REDIS_PORT') || 6379),
-                            password: configService.get('REDIS_PASSWORD') || undefined,
-                        });
-                    return { redis: redis.options };
+                    const parsedUrl = redisUrl ? new URL(redisUrl) : undefined;
+                    const redis = {
+                        host: parsedUrl?.hostname || configService.get('REDIS_HOST') || 'localhost',
+                        port: parsedUrl?.port
+                            ? Number(parsedUrl.port)
+                            : Number(configService.get('REDIS_PORT') || 6379),
+                        password: parsedUrl?.password
+                            ? decodeURIComponent(parsedUrl.password)
+                            : configService.get('REDIS_PASSWORD') || undefined,
+                        db: parsedUrl?.pathname && parsedUrl.pathname !== '/'
+                            ? Number(parsedUrl.pathname.slice(1))
+                            : undefined,
+                        tls: parsedUrl?.protocol === 'rediss:' ? {} : undefined,
+                        enableReadyCheck: false,
+                        maxRetriesPerRequest: null,
+                    };
+                    return {
+                        redis,
+                    };
                 },
             }),
             users_module_1.UsersModule,

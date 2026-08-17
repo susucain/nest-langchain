@@ -59,6 +59,8 @@ const video_session_entity_1 = require("./entities/video-session.entity");
 const video_task_entity_1 = require("./entities/video-task.entity");
 const storyboard_parser_service_1 = require("./storyboard-parser.service");
 const video_task_service_1 = require("./video-task.service");
+const preset_avatars_1 = require("./preset-avatars");
+const seedance_prompt_validator_service_1 = require("./seedance-prompt-validator.service");
 let VideoToolsService = class VideoToolsService {
     assetRepo;
     scriptRepo;
@@ -66,16 +68,18 @@ let VideoToolsService = class VideoToolsService {
     taskRepo;
     storyboardParser;
     taskService;
+    seedancePromptValidator;
     skillsDir = process.env.SKILLS_DIR
         ? path.resolve(process.env.SKILLS_DIR)
         : path.resolve(process.cwd(), 'src/video/skills');
-    constructor(assetRepo, scriptRepo, sessionRepo, taskRepo, storyboardParser, taskService) {
+    constructor(assetRepo, scriptRepo, sessionRepo, taskRepo, storyboardParser, taskService, seedancePromptValidator) {
         this.assetRepo = assetRepo;
         this.scriptRepo = scriptRepo;
         this.sessionRepo = sessionRepo;
         this.taskRepo = taskRepo;
         this.storyboardParser = storyboardParser;
         this.taskService = taskService;
+        this.seedancePromptValidator = seedancePromptValidator;
     }
     buildTools(ctx) {
         return {
@@ -85,6 +89,8 @@ let VideoToolsService = class VideoToolsService {
             parse_asset: this.buildParseAssetTool(ctx),
             update_product_profile: this.buildUpdateProductProfileTool(ctx),
             generate_script: this.buildGenerateScriptTool(ctx),
+            complete_without_script_change: this.buildCompleteWithoutScriptChangeTool(ctx),
+            request_user_confirmation: this.buildRequestUserConfirmationTool(ctx),
             create_video_task: this.buildCreateVideoTaskTool(ctx),
             get_script: this.buildGetScriptTool(ctx),
             list_scripts: this.buildListScriptsTool(ctx),
@@ -102,6 +108,54 @@ let VideoToolsService = class VideoToolsService {
             }),
         });
     }
+    buildRequestUserConfirmationTool(ctx) {
+        return (0, ai_1.tool)({
+            description: '当生成脚本或完整视频编辑任务缺少关键参数、存在不可自行推断的冲突，且必须等待用户确认后才能继续时调用。调用后停止本轮创作，不得调用 generate_script 或 create_video_task。',
+            inputSchema: (0, ai_1.zodSchema)(v4_1.z.object({
+                title: v4_1.z.string().min(1).describe('过程面板中的确认事项标题'),
+                description: v4_1.z.string().min(1).describe('需要确认的原因和已知约束'),
+                questions: v4_1.z.array(v4_1.z.object({
+                    field: v4_1.z.string().min(1).describe('待确认字段名'),
+                    question: v4_1.z.string().min(1).describe('向用户提出的具体问题'),
+                })).min(1).describe('需要用户回答的问题列表'),
+            })),
+            execute: async ({ title, description, questions }) => {
+                ctx.waitingForUser = true;
+                return {
+                    success: true,
+                    status: 'waiting_for_user',
+                    title,
+                    description,
+                    questions,
+                };
+            },
+        });
+    }
+    buildCompleteWithoutScriptChangeTool(ctx) {
+        return (0, ai_1.tool)({
+            description: '当用户要求修改已有脚本，但目标脚本的实际内容已经满足该要求时调用。调用后停止本轮脚本创作，不得调用 generate_script。必须先调用 get_script 读取目标脚本后才能调用。',
+            inputSchema: (0, ai_1.zodSchema)(v4_1.z.object({
+                script_id: v4_1.z.number().int().positive().describe('已核对的现有脚本 ID'),
+                description: v4_1.z.string().min(1).describe('说明哪一个镜头或内容已经满足用户要求'),
+            })),
+            execute: async ({ script_id, description }) => {
+                const script = await this.scriptRepo.findOne({
+                    where: { id: script_id, sessionId: ctx.sessionId, userId: ctx.userId },
+                });
+                if (!script) {
+                    return { success: false, message: '目标脚本不存在或无权访问' };
+                }
+                ctx.scriptUnchanged = true;
+                return {
+                    success: true,
+                    status: 'unchanged',
+                    script_id: script.id,
+                    version: script.version,
+                    description,
+                };
+            },
+        });
+    }
     resolveSkillPath(relativePath) {
         const normalized = path.normalize(relativePath);
         const resolved = path.resolve(this.skillsDir, normalized);
@@ -112,7 +166,7 @@ let VideoToolsService = class VideoToolsService {
     }
     buildReadFileTool() {
         return (0, ai_1.tool)({
-            description: '读取 skills 目录下的文件内容。路径相对于 skills 目录，例如 "life-service-storyboard-generator/references/shot-duration.md"。支持 .md / .json / .txt 等文本文件。',
+            description: '读取 skills 目录下的文件内容。路径相对于 skills 目录，例如 "life-service-storyboard-generator/references/shot-duration.md" 或 "sd2-pe/SKILL.md"。支持 .md / .json / .txt 等文本文件。',
             inputSchema: (0, ai_1.zodSchema)(v4_1.z.object({
                 path: v4_1.z.string().describe('相对于 skills 目录的文件路径，例如 life-service-storyboard-generator/references/shot-duration.md'),
             })),
@@ -182,8 +236,19 @@ let VideoToolsService = class VideoToolsService {
         });
     }
     buildGenerateScriptTool(ctx) {
+        const editSchema = v4_1.z.object({
+            mode: v4_1.z.literal('full_video_edit'),
+            sourceAssetId: v4_1.z.number().int().positive(),
+            sourceDurationSec: v4_1.z.number().positive(),
+            targetStartSec: v4_1.z.number().min(0),
+            targetEndSec: v4_1.z.number().positive(),
+            preserveAudio: v4_1.z.boolean(),
+        });
+        const editField = ctx.fullVideoEdit ? editSchema : editSchema.optional();
         return (0, ai_1.tool)({
-            description: '保存最终的分镜脚本，或保存基于已有视频的完整视频编辑任务。脚本重写时保存完整新脚本；完整视频编辑时 storyboard_markdown 仅包含可解析的视频编辑任务，seedance_prompt 必须要求输出原视频完整时长且仅修改目标时间段，meta.edit 必须提供原视频素材和时间范围。不得只在对话中输出提示词。工具会接收 storyboard_markdown、seedance_prompt 和 meta，自动解析为结构化数据并写入数据库。',
+            description: ctx.fullVideoEdit
+                ? '当前请求已锁定为引用视频的完整视频编辑任务。meta.edit 为必填项，必须使用当前原视频素材和完整时长；用户未给出修改时间范围时应先追问，禁止保存普通分镜脚本。storyboard_markdown 必须包含可解析的任务镜头，格式为“### 镜头 1：视频局部编辑 (开始s - 结束s)”，并包含“画面描述”和“旁白”字段。调用前必须阅读 sd2-pe/SKILL.md 审查 seedance_prompt。'
+                : '保存最终的分镜脚本，或保存基于已有视频的完整视频编辑任务。调用前必须阅读 sd2-pe/SKILL.md 审查 seedance_prompt。脚本重写时保存完整新脚本；完整视频编辑时 storyboard_markdown 仅包含可解析的视频编辑任务，seedance_prompt 必须要求输出原视频完整时长且仅修改目标时间段，meta.edit 必须提供原视频素材和时间范围。不得只在对话中输出提示词。工具会接收 storyboard_markdown、seedance_prompt 和 meta，自动解析为结构化数据并写入数据库。',
             inputSchema: (0, ai_1.zodSchema)(v4_1.z.object({
                 title: v4_1.z.string(),
                 storyboard_markdown: v4_1.z.string(),
@@ -191,17 +256,78 @@ let VideoToolsService = class VideoToolsService {
                 meta: v4_1.z.object({
                     description: v4_1.z.string(),
                     hashtags: v4_1.z.array(v4_1.z.string()),
-                    edit: v4_1.z.object({
-                        mode: v4_1.z.literal('full_video_edit'),
-                        sourceAssetId: v4_1.z.number().int().positive(),
-                        sourceDurationSec: v4_1.z.number().positive(),
-                        targetStartSec: v4_1.z.number().min(0),
-                        targetEndSec: v4_1.z.number().positive(),
-                        preserveAudio: v4_1.z.boolean(),
-                    }).optional(),
+                    character: v4_1.z.object({
+                        mode: v4_1.z.enum(['user_portrait', 'preset_avatar', 'none']),
+                        roleName: v4_1.z.string().optional(),
+                        rolePrompt: v4_1.z.string().optional(),
+                        primaryAssetId: v4_1.z.number().int().positive().optional(),
+                        presetAvatarId: v4_1.z.string().optional(),
+                        presetAlias: v4_1.z.string().optional(),
+                        selectionSource: v4_1.z.enum(['user_explicit', 'auto_selected', 'inherited']),
+                    }),
+                    edit: editField,
                 }),
             })),
             execute: async ({ title, storyboard_markdown, seedance_prompt, meta }) => {
+                if (ctx.waitingForUser || ctx.scriptUnchanged) {
+                    return {
+                        success: false,
+                        message: ctx.waitingForUser
+                            ? '本轮已等待用户确认，收到用户回复前不得保存脚本'
+                            : '本轮已确认目标脚本无需修改，不得保存重复版本',
+                    };
+                }
+                if (ctx.fullVideoEdit) {
+                    if (!meta.edit || meta.edit.mode !== 'full_video_edit') {
+                        return {
+                            success: false,
+                            message: '当前请求是引用视频修改，必须保存完整视频编辑任务并填写 meta.edit',
+                        };
+                    }
+                    if (meta.edit.sourceAssetId !== ctx.fullVideoEdit.sourceAssetId
+                        || meta.edit.sourceDurationSec !== ctx.fullVideoEdit.sourceDurationSec) {
+                        return {
+                            success: false,
+                            message: '视频编辑任务必须使用当前引用的原视频和完整时长',
+                        };
+                    }
+                }
+                const validation = this.seedancePromptValidator.validate(seedance_prompt);
+                if (validation.errors.length > 0) {
+                    return {
+                        success: false,
+                        message: `Seedance 提示词未通过校验：${validation.errors.join('；')}`,
+                        warnings: validation.warnings,
+                    };
+                }
+                if (meta.character.mode === 'user_portrait') {
+                    if (!meta.character.primaryAssetId || meta.character.presetAvatarId) {
+                        return { success: false, message: '上传人像角色必须且只能绑定 primaryAssetId' };
+                    }
+                    const portraitAsset = await this.assetRepo.findOne({
+                        where: {
+                            id: meta.character.primaryAssetId,
+                            sessionId: ctx.sessionId,
+                            userId: ctx.userId,
+                            assetType: 'image',
+                        },
+                    });
+                    if (!portraitAsset) {
+                        return { success: false, message: '主角色人像素材不存在或无权访问' };
+                    }
+                }
+                else if (meta.character.mode === 'preset_avatar') {
+                    if (!meta.character.presetAvatarId || meta.character.primaryAssetId
+                        || !(0, preset_avatars_1.isPresetAvatarId)(meta.character.presetAvatarId)) {
+                        return { success: false, message: '虚拟人像必须使用允许的预置人像 ID' };
+                    }
+                    if (meta.character.presetAlias !== (0, preset_avatars_1.getPresetAvatar)(meta.character.presetAvatarId).alias) {
+                        return { success: false, message: '虚拟人像简称与预置人像 ID 不匹配' };
+                    }
+                }
+                else if (meta.character.primaryAssetId || meta.character.presetAvatarId) {
+                    return { success: false, message: '无人物脚本不能绑定人像素材' };
+                }
                 if (meta.edit) {
                     if (meta.edit.targetStartSec >= meta.edit.targetEndSec
                         || meta.edit.targetEndSec > meta.edit.sourceDurationSec) {
@@ -220,6 +346,25 @@ let VideoToolsService = class VideoToolsService {
                     }
                 }
                 const parsed = this.storyboardParser.parse(storyboard_markdown);
+                if (meta.edit && parsed.shots.length === 0) {
+                    const time = `${meta.edit.targetStartSec}-${meta.edit.targetEndSec}s`;
+                    const scene = '视频局部编辑';
+                    parsed.shots = [{
+                            shot: 1,
+                            time,
+                            scene,
+                            visual: meta.description || `仅修改 ${time} 时间段，其余画面保持原视频不变`,
+                            audio: meta.edit.preserveAudio ? '保留原视频音频' : '',
+                        }];
+                    parsed.hook = scene;
+                    parsed.meta.duration = meta.edit.sourceDurationSec;
+                }
+                if (parsed.shots.length === 0) {
+                    return {
+                        success: false,
+                        message: '脚本未包含可解析的镜头。请使用“### 镜头 1：名称 (0s - 3s)”及画面描述、旁白字段重新生成。',
+                    };
+                }
                 const nextVersion = await this.getNextVersion(ctx.sessionId);
                 const script = this.scriptRepo.create({
                     sessionId: ctx.sessionId,
@@ -246,6 +391,7 @@ let VideoToolsService = class VideoToolsService {
                     title: saved.title,
                     shot_count: parsed.shots.length,
                     message: `脚本 V${saved.version} 已保存。`,
+                    warnings: validation.warnings,
                 };
             },
         });
@@ -257,6 +403,12 @@ let VideoToolsService = class VideoToolsService {
                 script_id: v4_1.z.number(),
             })),
             execute: async ({ script_id }) => {
+                if (ctx.waitingForUser) {
+                    return {
+                        success: false,
+                        message: '本轮已等待用户确认，收到用户回复前不得提交视频生成任务',
+                    };
+                }
                 const script = await this.scriptRepo.findOne({
                     where: { id: script_id, sessionId: ctx.sessionId, userId: ctx.userId },
                 });
@@ -267,8 +419,6 @@ let VideoToolsService = class VideoToolsService {
                     sessionId: ctx.sessionId,
                     userId: ctx.userId,
                 });
-                await this.scriptRepo.update({ id: script.id }, { status: 'used_for_video' });
-                await this.sessionRepo.update({ sessionId: ctx.sessionId }, { status: 'video_generating' });
                 return {
                     success: true,
                     task_id: task.taskId,
@@ -500,6 +650,7 @@ exports.VideoToolsService = VideoToolsService = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         storyboard_parser_service_1.StoryboardParserService,
-        video_task_service_1.VideoTaskService])
+        video_task_service_1.VideoTaskService,
+        seedance_prompt_validator_service_1.SeedancePromptValidatorService])
 ], VideoToolsService);
 //# sourceMappingURL=video-tools.service.js.map

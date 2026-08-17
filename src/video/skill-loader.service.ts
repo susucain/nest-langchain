@@ -8,14 +8,20 @@ export interface SkillMeta {
   trigger: string;
 }
 
-const SKILL_PATH = 'src/video/skills/life-service-storyboard-generator/SKILL.md';
+export const VIDEO_SKILLS = {
+  'life-service-storyboard-generator':
+    'src/video/skills/life-service-storyboard-generator/SKILL.md',
+  'sd2-pe': 'src/video/skills/sd2-pe/SKILL.md',
+} as const;
+
+export type VideoSkillName = keyof typeof VIDEO_SKILLS;
 
 @Injectable()
 export class SkillLoaderService {
   private readonly projectDir = path.resolve(__dirname, '../..');
 
-  async loadMeta(): Promise<SkillMeta> {
-    const content = await this.readSkillFile(SKILL_PATH);
+  async loadMeta(skillName: VideoSkillName = 'life-service-storyboard-generator'): Promise<SkillMeta> {
+    const content = await this.readSkillFile(this.getSkillPath(skillName));
     const match = content.match(/^---\n([\s\S]*?)\n---/);
     if (!match) {
       return { name: '', description: '', trigger: '' };
@@ -28,9 +34,17 @@ export class SkillLoaderService {
     };
   }
 
-  async loadFullContent(): Promise<string> {
-    const content = await this.readSkillFile(SKILL_PATH);
+  async loadFullContent(skillName: VideoSkillName = 'life-service-storyboard-generator'): Promise<string> {
+    const content = await this.readSkillFile(this.getSkillPath(skillName));
     return content.replace(/^---\n[\s\S]*?\n---/, '').trim();
+  }
+
+  private getSkillPath(skillName: string): string {
+    const skillPath = VIDEO_SKILLS[skillName as VideoSkillName];
+    if (!skillPath) {
+      throw new Error(`未知 video skill：${skillName}`);
+    }
+    return skillPath;
   }
 
   private async readSkillFile(relativePath: string): Promise<string> {
@@ -41,6 +55,6 @@ export class SkillLoaderService {
   private extractField(frontmatter: string, key: string): string {
     const regex = new RegExp(`^${key}:\\s*(.+)$`, 'm');
     const match = frontmatter.match(regex);
-    return match ? match[1].trim() : '';
+    return match ? match[1].trim().replace(/^["']|["']$/g, '') : '';
   }
 }

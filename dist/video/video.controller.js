@@ -39,6 +39,7 @@ let VideoController = class VideoController {
         const latestMessage = body.messages[body.messages.length - 1];
         const stream = await this.videoService.streamChat(sessionId, latestMessage ? [latestMessage] : [], {
             referencedScriptId: body.referenced_script_id,
+            sourceVideoAssetId: body.source_video_asset_id,
             userId: body.user_id,
         });
         (0, ai_1.pipeUIMessageStreamToResponse)({ response: res, stream });
@@ -93,10 +94,15 @@ let VideoController = class VideoController {
         }
         return this.videoTaskService.handleCallback(body);
     }
-    async getSessions(userId, page, pageSize) {
+    async getSessions(userId, page, pageSize, keyword) {
+        const normalizedKeyword = typeof keyword === 'string' ? keyword.trim() : undefined;
+        if (normalizedKeyword && normalizedKeyword.length > 64) {
+            throw new common_1.BadRequestException('搜索关键词不能超过 64 个字符');
+        }
         return this.videoService.findSessionsByUserId(userId ? Number(userId) : 1, {
             page: page ? Number(page) : 1,
             pageSize: pageSize ? Number(pageSize) : 7,
+            keyword: normalizedKeyword,
         });
     }
     async getRemoteTaskList(pageNum, pageSize, status, model) {
@@ -216,8 +222,9 @@ __decorate([
     __param(0, (0, common_1.Query)('user_id')),
     __param(1, (0, common_1.Query)('page')),
     __param(2, (0, common_1.Query)('page_size')),
+    __param(3, (0, common_1.Query)('keyword')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number, Number, Number]),
+    __metadata("design:paramtypes", [Number, Number, Number, String]),
     __metadata("design:returntype", Promise)
 ], VideoController.prototype, "getSessions", null);
 __decorate([

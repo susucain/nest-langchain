@@ -22,9 +22,29 @@ const typeorm_2 = require("typeorm");
 const ali_oss_1 = __importDefault(require("ali-oss"));
 const config_1 = require("@nestjs/config");
 const oss_entity_1 = require("./entities/oss.entity");
+const promises_1 = require("node:dns/promises");
+const node_net_1 = require("node:net");
+const node_stream_1 = require("node:stream");
+const DEFAULT_TRANSFER_MAX_BYTES = 1024 * 1024 * 1024;
+function isPrivateAddress(address) {
+    if (address === '::1' || address === '0.0.0.0')
+        return true;
+    if (address.startsWith('fe80:') || address.startsWith('fc') || address.startsWith('fd'))
+        return true;
+    if ((0, node_net_1.isIP)(address) !== 4)
+        return false;
+    const [first, second] = address.split('.').map(Number);
+    return first === 10
+        || first === 127
+        || first === 0
+        || (first === 169 && second === 254)
+        || (first === 172 && second >= 16 && second <= 31)
+        || (first === 192 && second === 168);
+}
 let OssService = class OssService {
     ossFileRepo;
     client;
+    transferMaxBytes;
     constructor(configService, ossFileRepo) {
         this.ossFileRepo = ossFileRepo;
         this.client = new ali_oss_1.default({
@@ -33,6 +53,63 @@ let OssService = class OssService {
             accessKeySecret: configService.get('OSS_ACCESS_KEY_SECRET'),
             bucket: configService.get('OSS_BUCKET_NAME'),
         });
+        this.transferMaxBytes = Number(configService.get('OSS_TRANSFER_MAX_BYTES') || DEFAULT_TRANSFER_MAX_BYTES);
+    }
+    async transferFromUrl(sourceUrl, options) {
+        const url = await this.validateTransferUrl(sourceUrl);
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 120_000);
+        try {
+            const response = await fetch(url, {
+                redirect: 'error',
+                signal: controller.signal,
+            });
+            if (!response.ok || !response.body) {
+                throw new common_1.BadRequestException(`下载生成文件失败: HTTP ${response.status}`);
+            }
+            const mimeType = (response.headers.get('content-type') || '')
+                .split(';', 1)[0]
+                .toLowerCase();
+            if (!options.allowedMimeTypes.includes(mimeType)) {
+                throw new common_1.BadRequestException(`不支持的生成文件类型: ${mimeType || 'unknown'}`);
+            }
+            const contentLength = Number(response.headers.get('content-length') || 0);
+            if (contentLength > this.transferMaxBytes) {
+                throw new common_1.BadRequestException('生成文件超过允许的转存大小');
+            }
+            const result = await this.client.put(options.ossKey, node_stream_1.Readable.fromWeb(response.body), { mime: mimeType });
+            const ossFile = this.ossFileRepo.create({
+                fileName: options.fileName,
+                url: result.url,
+                fileType: mimeType,
+                createdBy: 'video_generation',
+            });
+            await this.ossFileRepo.save(ossFile);
+            return { url: result.url, fileType: mimeType, ossKey: options.ossKey };
+        }
+        finally {
+            clearTimeout(timeout);
+        }
+    }
+    async validateTransferUrl(sourceUrl) {
+        let url;
+        try {
+            url = new URL(sourceUrl);
+        }
+        catch {
+            throw new common_1.BadRequestException('生成文件地址无效');
+        }
+        if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+            throw new common_1.BadRequestException('生成文件地址协议无效');
+        }
+        if (url.hostname === 'localhost') {
+            throw new common_1.BadRequestException('生成文件地址不允许访问本机');
+        }
+        const addresses = await (0, promises_1.lookup)(url.hostname, { all: true });
+        if (addresses.length === 0 || addresses.some(({ address }) => isPrivateAddress(address))) {
+            throw new common_1.BadRequestException('生成文件地址不允许访问内网');
+        }
+        return url;
     }
     async uploadFile(originalName, fileBuffer, mimeType) {
         const ext = originalName.split('.').pop() || '';

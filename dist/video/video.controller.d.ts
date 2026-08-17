@@ -11,6 +11,7 @@ export declare class VideoController {
         messages: UIMessage[];
         session_id?: string;
         referenced_script_id?: number;
+        source_video_asset_id?: number;
         user_id?: number;
     }, res: Response): Promise<void>;
     getHistory(sessionId: string): Promise<UIMessage<unknown, import("ai", { with: { "resolution-mode": "import" } }).UIDataTypes, import("ai", { with: { "resolution-mode": "import" } }).UITools>[]>;
@@ -23,6 +24,7 @@ export declare class VideoController {
         url: string;
         thumbnail_url?: string;
         duration_sec?: number;
+        content_category?: 'portrait' | 'product' | 'food' | 'store' | 'environment' | 'other';
     }): Promise<import("./entities/video-asset.entity").VideoAsset>;
     getAssets(sessionId: string): Promise<import("./entities/video-asset.entity").VideoAsset[]>;
     deleteAsset(assetId: number): Promise<{
@@ -54,7 +56,7 @@ export declare class VideoController {
         received: boolean;
         applied: boolean;
     }>;
-    getSessions(userId?: number, page?: number, pageSize?: number): Promise<{
+    getSessions(userId?: number, page?: number, pageSize?: number, keyword?: string): Promise<{
         items: import("./entities/video-session.entity").VideoSession[];
         total: number;
         page: number;

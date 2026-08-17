@@ -1,0 +1,327 @@
+jest.mock('ioredis', () => {
+  class RedisMock {
+    options = {};
+    publish = jest.fn().mockResolvedValue(1);
+    subscribe = jest.fn().mockImplementation((_channel, callback) => callback(null));
+    on = jest.fn();
+  }
+
+  return { __esModule: true, default: RedisMock };
+});
+
+import { VideoTaskService } from '../../../src/video/video-task.service';
+
+describe('VideoTaskService callbacks', () => {
+  let service: VideoTaskService;
+  let task: any;
+  let repo: { findOne: jest.Mock; save: jest.Mock; count: jest.Mock };
+  let sessionRepo: { update: jest.Mock };
+  let messageRepo: { findOne: jest.Mock; create: jest.Mock; save: jest.Mock };
+  let taskQueue: { add: jest.Mock };
+
+  beforeEach(() => {
+    task = {
+      taskId: 'task-1',
+      sessionId: 'session-1',
+      status: 'queued',
+      volcResponse: JSON.stringify({ id: 'task-1', status: 'queued' }),
+    };
+    repo = {
+      findOne: jest.fn().mockResolvedValue(task),
+      save: jest.fn().mockImplementation(async (value) => value),
+      count: jest.fn().mockResolvedValue(0),
+    };
+    sessionRepo = { update: jest.fn().mockResolvedValue({}) };
+    messageRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      create: jest.fn((value) => value),
+      save: jest.fn().mockImplementation(async (value) => value),
+    };
+    taskQueue = { add: jest.fn().mockResolvedValue({}) };
+
+    const config = {
+      get: jest.fn((key: string) => ({
+        VIDEO_CALLBACK_TOKEN: 'test-callback-token',
+        REDIS_HOST: 'localhost',
+        REDIS_PORT: '6379',
+      })[key]),
+    };
+
+    service = new VideoTaskService(
+      repo as any,
+      {} as any,
+      {} as any,
+      sessionRepo as any,
+      messageRepo as any,
+      taskQueue as any,
+      config as any,
+    );
+  });
+
+  it('validates the callback token', () => {
+    expect(service.isValidCallbackToken('test-callback-token')).toBe(true);
+    expect(service.isValidCallbackToken('wrong-token')).toBe(false);
+    expect(service.isValidCallbackToken()).toBe(false);
+  });
+
+  it('does not apply or publish an identical callback twice', async () => {
+    const callback = { id: 'task-1', status: 'running' };
+
+    await expect(service.handleCallback(callback)).resolves.toEqual({
+      received: true,
+      applied: true,
+    });
+    await expect(service.handleCallback(callback)).resolves.toEqual({
+      received: true,
+      applied: false,
+    });
+
+    expect(repo.save).toHaveBeenCalledTimes(1);
+    expect((service as any).redis.publish).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not allow a terminal task to be overwritten by a later callback', async () => {
+    task.status = 'succeeded';
+    task.volcResponse = JSON.stringify({
+      id: 'task-1',
+      status: 'succeeded',
+      content: { video_url: 'https://example.test/video.mp4' },
+    });
+
+    await expect(service.handleCallback({ id: 'task-1', status: 'running' })).resolves.toEqual({
+      received: true,
+      applied: false,
+    });
+
+    expect(task.status).toBe('succeeded');
+    expect(repo.save).not.toHaveBeenCalled();
+    expect((service as any).redis.publish).not.toHaveBeenCalled();
+  });
+
+  it('does not allow a lower-priority status to overwrite the current status', async () => {
+    task.status = 'running';
+    task.volcResponse = JSON.stringify({ id: 'task-1', status: 'running' });
+
+    await expect(service.handleCallback({ id: 'task-1', status: 'queued' })).resolves.toEqual({
+      received: true,
+      applied: false,
+    });
+
+    expect(task.status).toBe('running');
+    expect(repo.save).not.toHaveBeenCalled();
+  });
+
+  it('queues OSS persistence when the model reports success', async () => {
+    await expect(service.handleCallback({
+      id: 'task-1',
+      status: 'succeeded',
+      content: { video_url: 'https://example.test/video.mp4' },
+    })).resolves.toEqual({
+      received: true,
+      applied: true,
+    });
+
+    expect(task.status).toBe('persisting');
+    expect(task.generatedVideoUrl).toBeUndefined();
+    expect(taskQueue.add).toHaveBeenCalledWith(
+      'persist-generated-video',
+      { taskId: 'task-1' },
+      expect.objectContaining({ jobId: 'persist-generated-video:task-1' }),
+    );
+    expect(messageRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('keeps the session generating while another task is active', async () => {
+    repo.count.mockResolvedValueOnce(1);
+
+    await service.handleCallback({ id: 'task-1', status: 'failed' });
+
+    expect(sessionRepo.update).toHaveBeenCalledWith(
+      { sessionId: 'session-1' },
+      { status: 'video_generating' },
+    );
+  });
+
+  it('does not write a duplicate result message for an already processed callback', async () => {
+    const callback = { id: 'task-1', status: 'failed', error: { message: '内容不合规' } };
+
+    await service.handleCallback(callback);
+    await service.handleCallback(callback);
+
+    expect(messageRepo.save).toHaveBeenCalledTimes(1);
+  });
+
+  it('updates the submitted message instead of creating a second video message', async () => {
+    const submittedMessage = {
+      taskId: 'task-1',
+      eventType: 'video_generation_submitted',
+      content: '视频生成任务已提交，正在处理中。',
+      metadata: { kind: 'video_generation_submitted', taskId: 'task-1', status: 'queued' },
+    };
+    messageRepo.findOne.mockResolvedValue(submittedMessage);
+
+    await service.handleCallback({
+      id: 'task-1',
+      status: 'failed',
+      error: { message: '内容不合规' },
+    });
+
+    expect(messageRepo.create).not.toHaveBeenCalled();
+    expect(messageRepo.save).toHaveBeenCalledWith(expect.objectContaining({
+      taskId: 'task-1',
+      eventType: 'video_generation_submitted',
+      content: '视频生成未完成：内容不合规',
+      metadata: expect.objectContaining({ status: 'failed' }),
+    }));
+  });
+});
+
+describe('VideoTaskService video generation', () => {
+  let service: VideoTaskService;
+  let scriptRepo: { findOne: jest.Mock };
+  let assetRepo: { findOne: jest.Mock; find: jest.Mock; create: jest.Mock; save: jest.Mock };
+  let createdTaskParams: any;
+
+  beforeEach(() => {
+    scriptRepo = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 10,
+        sessionId: 'session-1',
+        userId: 1,
+        seedancePrompt: 'Edit the source video',
+        meta: {
+          ratio: '16:9',
+          edit: {
+            mode: 'full_video_edit',
+            sourceAssetId: 20,
+            sourceDurationSec: 12,
+            targetStartSec: 2,
+            targetEndSec: 6,
+            preserveAudio: true,
+          },
+        },
+      }),
+    };
+    assetRepo = {
+      findOne: jest.fn().mockImplementation(({ where }) => {
+        if ('url' in where) return Promise.resolve(null);
+        return Promise.resolve({
+          id: 20,
+          sessionId: 'session-1',
+          userId: 1,
+          assetType: 'video',
+          url: 'https://example.test/source.mp4',
+        });
+      }),
+      find: jest.fn().mockResolvedValue([
+        { assetType: 'video', url: 'https://example.test/source.mp4' },
+        { assetType: 'image', url: 'https://example.test/reference.png' },
+      ]),
+      create: jest.fn((value) => value),
+      save: jest.fn().mockResolvedValue({}),
+    };
+
+    const config = {
+      get: jest.fn((key: string) => ({
+        REDIS_HOST: 'localhost',
+        REDIS_PORT: '6379',
+      })[key]),
+    };
+    service = new VideoTaskService(
+      {} as any,
+      scriptRepo as any,
+      assetRepo as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      config as any,
+      {} as any,
+    );
+    jest.spyOn(service, 'createTask').mockImplementation(async (params) => {
+      createdTaskParams = params;
+      return { taskId: 'task-1' } as any;
+    });
+    jest.spyOn(service as any, 'markVideoGenerationStarted').mockResolvedValue(undefined);
+    jest.spyOn(service as any, 'saveTaskEventMessage').mockResolvedValue(undefined);
+  });
+
+  it('includes uploaded reference images when generating a full video edit', async () => {
+    await service.createTaskByScriptId(10, {
+      sessionId: 'session-1',
+      userId: 1,
+      assets: [{
+        type: 'image',
+        url: 'https://example.test/reference.png',
+        name: 'reference.png',
+      }],
+    });
+
+    expect(createdTaskParams).toEqual(expect.objectContaining({
+      imageUrls: ['https://example.test/reference.png'],
+      videoUrls: ['https://example.test/source.mp4'],
+      duration: 12,
+      ratio: '16:9',
+    }));
+  });
+
+  it('puts the user-selected portrait first and does not duplicate it', async () => {
+    scriptRepo.findOne.mockResolvedValueOnce({
+      id: 10, sessionId: 'session-1', userId: 1, seedancePrompt: 'Use portrait',
+      meta: { character: { mode: 'user_portrait', primaryAssetId: 30, selectionSource: 'user_explicit' } },
+    });
+    assetRepo.findOne.mockImplementation(({ where }) => {
+      if ('url' in where) return Promise.resolve(null);
+      return where.id === 30
+        ? Promise.resolve({ id: 30, assetType: 'image', url: 'https://example.test/portrait.png' })
+        : Promise.resolve(null);
+    });
+    assetRepo.find.mockResolvedValueOnce([
+      { id: 30, assetType: 'image', url: 'https://example.test/portrait.png' },
+      { id: 31, assetType: 'image', url: 'https://example.test/product.png' },
+    ]);
+
+    await service.createTaskByScriptId(10, { sessionId: 'session-1', userId: 1 });
+
+    expect(createdTaskParams.imageUrls).toEqual([
+      'https://example.test/portrait.png',
+      'https://example.test/product.png',
+    ]);
+  });
+
+  it('puts the selected preset avatar first', async () => {
+    scriptRepo.findOne.mockResolvedValueOnce({
+      id: 10, sessionId: 'session-1', userId: 1, seedancePrompt: 'Use preset',
+      meta: {
+        character: {
+          mode: 'preset_avatar',
+          presetAvatarId: 'asset-20260720212016-qfsgq',
+          selectionSource: 'user_selected',
+        },
+      },
+    });
+    assetRepo.find.mockResolvedValueOnce([
+      { id: 31, assetType: 'image', url: 'https://example.test/product.png' },
+    ]);
+
+    await service.createTaskByScriptId(10, { sessionId: 'session-1', userId: 1 });
+
+    expect(createdTaskParams.imageUrls).toEqual([
+      'asset://asset-20260720212016-qfsgq',
+      'https://example.test/product.png',
+    ]);
+  });
+
+  it('does not add a character image for scripts without a character', async () => {
+    scriptRepo.findOne.mockResolvedValueOnce({
+      id: 10, sessionId: 'session-1', userId: 1, seedancePrompt: 'No character',
+      meta: { character: { mode: 'none', selectionSource: 'auto_selected' } },
+    });
+    assetRepo.find.mockResolvedValueOnce([
+      { id: 31, assetType: 'image', url: 'https://example.test/product.png' },
+    ]);
+
+    await service.createTaskByScriptId(10, { sessionId: 'session-1', userId: 1 });
+
+    expect(createdTaskParams.imageUrls).toEqual(['https://example.test/product.png']);
+  });
+});

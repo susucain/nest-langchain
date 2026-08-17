@@ -17,6 +17,7 @@ let VideoAsset = class VideoAsset {
     userId;
     assetType;
     assetPurpose;
+    contentCategory;
     name;
     url;
     thumbnailUrl;
@@ -46,6 +47,10 @@ __decorate([
     (0, typeorm_1.Column)({ name: 'asset_purpose', length: 32, default: 'analysis', comment: '素材用途：analysis / reference' }),
     __metadata("design:type", String)
 ], VideoAsset.prototype, "assetPurpose", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'content_category', length: 32, nullable: true, comment: '素材内容分类：portrait / product / food / store / environment / other' }),
+    __metadata("design:type", String)
+], VideoAsset.prototype, "contentCategory", void 0);
 __decorate([
     (0, typeorm_1.Column)({ name: 'name', length: 256, comment: '素材名称' }),
     __metadata("design:type", String)

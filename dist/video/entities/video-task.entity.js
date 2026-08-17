@@ -59,7 +59,7 @@ __decorate([
     __metadata("design:type", String)
 ], VideoTask.prototype, "model", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ name: 'status', length: 32, default: 'queued', comment: '任务状态: queued/running/succeeded/failed/expired/cancelled' }),
+    (0, typeorm_1.Column)({ name: 'status', length: 32, default: 'queued', comment: '任务状态: queued/running/persisting/succeeded/failed/expired/cancelled' }),
     __metadata("design:type", String)
 ], VideoTask.prototype, "status", void 0);
 __decorate([

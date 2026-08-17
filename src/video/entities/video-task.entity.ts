@@ -28,7 +28,7 @@ export class VideoTask {
   @Column({ name: 'model', length: 128, comment: '使用的模型' })
   model: string;
 
-  @Column({ name: 'status', length: 32, default: 'queued', comment: '任务状态: queued/running/succeeded/failed/expired/cancelled' })
+  @Column({ name: 'status', length: 32, default: 'queued', comment: '任务状态: queued/running/persisting/succeeded/failed/expired/cancelled' })
   status: string;
 
   @Column({ name: 'prompt', type: 'text', nullable: true, comment: '提示词' })

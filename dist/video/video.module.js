@@ -22,7 +22,10 @@ const video_llm_service_1 = require("./video-llm.service");
 const skill_loader_service_1 = require("./skill-loader.service");
 const storyboard_parser_service_1 = require("./storyboard-parser.service");
 const video_tools_service_1 = require("./video-tools.service");
+const video_persistence_processor_1 = require("./video-persistence.processor");
+const seedance_prompt_validator_service_1 = require("./seedance-prompt-validator.service");
 const bull_1 = require("@nestjs/bull");
+const oss_module_1 = require("../oss/oss.module");
 let VideoModule = class VideoModule {
 };
 exports.VideoModule = VideoModule;
@@ -36,9 +39,12 @@ exports.VideoModule = VideoModule = __decorate([
             skill_loader_service_1.SkillLoaderService,
             storyboard_parser_service_1.StoryboardParserService,
             video_tools_service_1.VideoToolsService,
+            video_persistence_processor_1.VideoPersistenceProcessor,
+            seedance_prompt_validator_service_1.SeedancePromptValidatorService,
         ],
         imports: [
             tool_module_1.ToolModule,
+            oss_module_1.OssModule,
             typeorm_1.TypeOrmModule.forFeature([video_session_entity_1.VideoSession, video_task_entity_1.VideoTask, video_message_entity_1.VideoMessage, video_asset_entity_1.VideoAsset, video_script_entity_1.VideoScript]),
             bull_1.BullModule.registerQueue({
                 name: 'video-tasks',

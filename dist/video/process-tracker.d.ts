@@ -23,10 +23,16 @@ export declare class ProcessTracker {
     markProfileRunning(): void;
     markProfileUpdated(profile?: Record<string, any>): void;
     markGenerating(): void;
+    markScriptValidationFailed(): void;
     markScriptGenerated(result: {
         title: string;
         shot_count: number;
         version: number;
+    }): void;
+    markScriptUnchanged(description: string): void;
+    waitForUser(input: {
+        title?: string;
+        description: string;
     }): void;
     finish(): void;
     error(message?: string): void;

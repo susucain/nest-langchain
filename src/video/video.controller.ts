@@ -16,7 +16,13 @@ export class VideoController {
 
   @Post('chat')
   async chat(
-    @Body() body: { messages: UIMessage[]; session_id?: string; referenced_script_id?: number; user_id?: number },
+    @Body() body: {
+      messages: UIMessage[];
+      session_id?: string;
+      referenced_script_id?: number;
+      source_video_asset_id?: number;
+      user_id?: number;
+    },
     @Res() res: Response,
   ) {
     if (!body.messages || !Array.isArray(body.messages)) {
@@ -33,6 +39,7 @@ export class VideoController {
     const latestMessage = body.messages[body.messages.length - 1];
     const stream = await this.videoService.streamChat(sessionId, latestMessage ? [latestMessage] : [], {
       referencedScriptId: body.referenced_script_id,
+      sourceVideoAssetId: body.source_video_asset_id,
       userId: body.user_id,
     });
     pipeUIMessageStreamToResponse({ response: res as any, stream });
@@ -54,6 +61,7 @@ export class VideoController {
       url: string;
       thumbnail_url?: string;
       duration_sec?: number;
+      content_category?: 'portrait' | 'product' | 'food' | 'store' | 'environment' | 'other';
     },
   ) {
     return this.videoService.createAsset(body);
@@ -150,10 +158,18 @@ export class VideoController {
     @Query('user_id') userId?: number,
     @Query('page') page?: number,
     @Query('page_size') pageSize?: number,
+    @Query('keyword') keyword?: string,
   ) {
+    const normalizedKeyword =
+      typeof keyword === 'string' ? keyword.trim() : undefined;
+    if (normalizedKeyword && normalizedKeyword.length > 64) {
+      throw new BadRequestException('搜索关键词不能超过 64 个字符');
+    }
+
     return this.videoService.findSessionsByUserId(userId ? Number(userId) : 1, {
       page: page ? Number(page) : 1,
       pageSize: pageSize ? Number(pageSize) : 7,
+      keyword: normalizedKeyword,
     });
   }
 

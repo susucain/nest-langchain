@@ -20,6 +20,8 @@ let VideoMessage = class VideoMessage {
     parts;
     toolCalls;
     metadata;
+    taskId;
+    eventType;
     createdAt;
 };
 exports.VideoMessage = VideoMessage;
@@ -56,11 +58,20 @@ __decorate([
     __metadata("design:type", Object)
 ], VideoMessage.prototype, "metadata", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ name: 'task_id', type: 'varchar', length: 128, nullable: true, comment: '关联视频任务ID' }),
+    __metadata("design:type", String)
+], VideoMessage.prototype, "taskId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ name: 'event_type', type: 'varchar', length: 64, nullable: true, comment: '系统事件类型' }),
+    __metadata("design:type", String)
+], VideoMessage.prototype, "eventType", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)({ name: 'created_at', comment: '创建时间' }),
     __metadata("design:type", Date)
 ], VideoMessage.prototype, "createdAt", void 0);
 exports.VideoMessage = VideoMessage = __decorate([
     (0, typeorm_1.Entity)('video_message'),
-    (0, typeorm_1.Index)(['sessionId', 'createdAt'])
+    (0, typeorm_1.Index)(['sessionId', 'createdAt']),
+    (0, typeorm_1.Index)(['taskId', 'eventType'], { unique: true })
 ], VideoMessage);
 //# sourceMappingURL=video-message.entity.js.map

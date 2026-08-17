@@ -7,5 +7,7 @@ export declare class VideoMessage {
     parts: Record<string, any>[];
     toolCalls: Record<string, any>;
     metadata: Record<string, any>;
+    taskId: string;
+    eventType: string;
     createdAt: Date;
 }

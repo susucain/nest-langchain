@@ -26,6 +26,7 @@ export declare class VideoService {
     ensureSession(sessionId: string, userId?: number): Promise<VideoSession>;
     streamChat(sessionId: string, messages: UIMessage[], options?: {
         referencedScriptId?: number;
+        sourceVideoAssetId?: number;
         userId?: number;
     }): Promise<ReadableStream<import("ai", { with: { "resolution-mode": "import" } }).InferUIMessageChunk<UIMessage<unknown, import("ai", { with: { "resolution-mode": "import" } }).UIDataTypes, import("ai", { with: { "resolution-mode": "import" } }).UITools>>>>;
     private handleProcessChunk;
@@ -50,6 +51,7 @@ export declare class VideoService {
         url: string;
         thumbnail_url?: string;
         duration_sec?: number;
+        content_category?: 'portrait' | 'product' | 'food' | 'store' | 'environment' | 'other';
     }): Promise<VideoAsset>;
     findAssetsBySessionId(sessionId: string): Promise<VideoAsset[]>;
     deleteAsset(assetId: number): Promise<{
@@ -61,6 +63,7 @@ export declare class VideoService {
     findSessionsByUserId(userId: number, options?: {
         page?: number;
         pageSize?: number;
+        keyword?: string;
     }): Promise<{
         items: VideoSession[];
         total: number;

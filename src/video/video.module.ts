@@ -13,7 +13,10 @@ import { VideoLLMService } from './video-llm.service';
 import { SkillLoaderService } from './skill-loader.service';
 import { StoryboardParserService } from './storyboard-parser.service';
 import { VideoToolsService } from './video-tools.service';
+import { VideoPersistenceProcessor } from './video-persistence.processor';
+import { SeedancePromptValidatorService } from './seedance-prompt-validator.service';
 import { BullModule } from '@nestjs/bull';
+import { OssModule } from '../oss/oss.module';
 
 @Module({
   controllers: [VideoController],
@@ -24,9 +27,12 @@ import { BullModule } from '@nestjs/bull';
     SkillLoaderService,
     StoryboardParserService,
     VideoToolsService,
+    VideoPersistenceProcessor,
+    SeedancePromptValidatorService,
   ],
   imports: [
     ToolModule,
+    OssModule,
     TypeOrmModule.forFeature([VideoSession, VideoTask, VideoMessage, VideoAsset, VideoScript]),
     BullModule.registerQueue({
       name: 'video-tasks',

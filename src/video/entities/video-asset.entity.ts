@@ -9,6 +9,7 @@ import {
 
 export type AssetType = 'image' | 'video' | 'url';
 export type AssetPurpose = 'analysis' | 'reference';
+export type AssetContentCategory = 'portrait' | 'product' | 'food' | 'store' | 'environment' | 'other';
 
 @Entity('video_assets')
 @Index(['sessionId'])
@@ -27,6 +28,9 @@ export class VideoAsset {
 
   @Column({ name: 'asset_purpose', length: 32, default: 'analysis', comment: '素材用途：analysis / reference' })
   assetPurpose: AssetPurpose;
+
+  @Column({ name: 'content_category', length: 32, nullable: true, comment: '素材内容分类：portrait / product / food / store / environment / other' })
+  contentCategory: AssetContentCategory;
 
   @Column({ name: 'name', length: 256, comment: '素材名称' })
   name: string;

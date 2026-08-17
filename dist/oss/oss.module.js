@@ -20,6 +20,7 @@ exports.OssModule = OssModule = __decorate([
         imports: [typeorm_1.TypeOrmModule.forFeature([oss_entity_1.OssFile])],
         controllers: [oss_controller_1.OssController],
         providers: [oss_service_1.OssService],
+        exports: [oss_service_1.OssService],
     })
 ], OssModule);
 //# sourceMappingURL=oss.module.js.map

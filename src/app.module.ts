@@ -18,7 +18,6 @@ import { SpeechModule } from './speech/speech.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { OssModule } from './oss/oss.module';
 import { BullModule } from '@nestjs/bull';
-import Redis from 'ioredis';
 import { OssFile } from './oss/entities/oss.entity';
 import { VideoModule } from './video/video.module';
 import { VideoSession } from './video/entities/video-session.entity';
@@ -80,14 +79,25 @@ import { LangfuseModule } from './langfuse/langfuse.module';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
         const redisUrl = configService.get<string>('REDIS_URL');
-        const redis = redisUrl
-          ? new Redis(redisUrl)
-          : new Redis({
-              host: configService.get<string>('REDIS_HOST') || 'localhost',
-              port: Number(configService.get<string>('REDIS_PORT') || 6379),
-              password: configService.get<string>('REDIS_PASSWORD') || undefined,
-            });
-        return { redis: redis.options as any };
+        const parsedUrl = redisUrl ? new URL(redisUrl) : undefined;
+        const redis = {
+          host: parsedUrl?.hostname || configService.get<string>('REDIS_HOST') || 'localhost',
+          port: parsedUrl?.port
+            ? Number(parsedUrl.port)
+            : Number(configService.get<string>('REDIS_PORT') || 6379),
+          password: parsedUrl?.password
+            ? decodeURIComponent(parsedUrl.password)
+            : configService.get<string>('REDIS_PASSWORD') || undefined,
+          db: parsedUrl?.pathname && parsedUrl.pathname !== '/'
+            ? Number(parsedUrl.pathname.slice(1))
+            : undefined,
+          tls: parsedUrl?.protocol === 'rediss:' ? {} : undefined,
+          enableReadyCheck: false,
+          maxRetriesPerRequest: null,
+        };
+        return {
+          redis,
+        } as any;
       },
     }),
     UsersModule,

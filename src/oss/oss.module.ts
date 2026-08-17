@@ -8,5 +8,6 @@ import { OssFile } from './entities/oss.entity';
   imports: [TypeOrmModule.forFeature([OssFile])],
   controllers: [OssController],
   providers: [OssService],
+  exports: [OssService],
 })
 export class OssModule {}

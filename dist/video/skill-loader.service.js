@@ -39,15 +39,18 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SkillLoaderService = void 0;
+exports.SkillLoaderService = exports.VIDEO_SKILLS = void 0;
 const common_1 = require("@nestjs/common");
 const fs = __importStar(require("node:fs/promises"));
 const path = __importStar(require("node:path"));
-const SKILL_PATH = 'src/video/skills/life-service-storyboard-generator/SKILL.md';
+exports.VIDEO_SKILLS = {
+    'life-service-storyboard-generator': 'src/video/skills/life-service-storyboard-generator/SKILL.md',
+    'sd2-pe': 'src/video/skills/sd2-pe/SKILL.md',
+};
 let SkillLoaderService = class SkillLoaderService {
     projectDir = path.resolve(__dirname, '../..');
-    async loadMeta() {
-        const content = await this.readSkillFile(SKILL_PATH);
+    async loadMeta(skillName = 'life-service-storyboard-generator') {
+        const content = await this.readSkillFile(this.getSkillPath(skillName));
         const match = content.match(/^---\n([\s\S]*?)\n---/);
         if (!match) {
             return { name: '', description: '', trigger: '' };
@@ -59,9 +62,16 @@ let SkillLoaderService = class SkillLoaderService {
             trigger: this.extractField(frontmatter, 'trigger'),
         };
     }
-    async loadFullContent() {
-        const content = await this.readSkillFile(SKILL_PATH);
+    async loadFullContent(skillName = 'life-service-storyboard-generator') {
+        const content = await this.readSkillFile(this.getSkillPath(skillName));
         return content.replace(/^---\n[\s\S]*?\n---/, '').trim();
+    }
+    getSkillPath(skillName) {
+        const skillPath = exports.VIDEO_SKILLS[skillName];
+        if (!skillPath) {
+            throw new Error(`未知 video skill：${skillName}`);
+        }
+        return skillPath;
     }
     async readSkillFile(relativePath) {
         const fullPath = path.join(this.projectDir, relativePath);
@@ -70,7 +80,7 @@ let SkillLoaderService = class SkillLoaderService {
     extractField(frontmatter, key) {
         const regex = new RegExp(`^${key}:\\s*(.+)$`, 'm');
         const match = frontmatter.match(regex);
-        return match ? match[1].trim() : '';
+        return match ? match[1].trim().replace(/^["']|["']$/g, '') : '';
     }
 };
 exports.SkillLoaderService = SkillLoaderService;

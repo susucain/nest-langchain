@@ -238,6 +238,19 @@ class ProcessTracker {
             action.status = 'running';
         this.emit();
     }
+    markScriptValidationFailed() {
+        if (!this.started || this.finished)
+            return;
+        this.hasGenerationActivity = true;
+        const phase = this.state.phases.find((p) => p.id === 'generate-script');
+        const action = phase?.actions?.find((item) => item.id === 'generate-script-action');
+        if (!action)
+            return;
+        action.status = 'running';
+        action.title = '修正 Seedance 2.0 提示词';
+        action.description = '提示词校验未通过，正在自动修正并重新保存脚本';
+        this.emit();
+    }
     markScriptGenerated(result) {
         if (!this.started || this.finished)
             return;
@@ -267,6 +280,41 @@ class ProcessTracker {
         ];
         this.markPhaseDone('generate-script');
     }
+    markScriptUnchanged(description) {
+        if (!this.started || this.finished)
+            return;
+        this.hasGenerationActivity = true;
+        const phase = this.state.phases.find((item) => item.id === 'generate-script');
+        if (!phase)
+            return;
+        const action = phase.actions?.find((item) => item.id === 'generate-script-action');
+        if (action) {
+            action.status = 'completed';
+            action.title = '无需生成新版本';
+            action.description = description;
+        }
+        this.markPhaseDone('generate-script');
+    }
+    waitForUser(input) {
+        if (!this.started || this.finished)
+            return;
+        this.finished = true;
+        const endTime = this.now();
+        const phase = this.state.phases.find((item) => item.id === 'generate-script');
+        if (phase) {
+            phase.status = 'waiting_for_user';
+            phase.endTime = endTime;
+            const action = phase.actions?.find((item) => item.id === 'generate-script-action');
+            if (action) {
+                action.status = 'waiting_for_user';
+                action.title = input.title || '等待用户确认';
+                action.description = input.description;
+            }
+        }
+        this.state.status = 'waiting_for_user';
+        this.state.endTime = endTime;
+        this.emit();
+    }
     finish() {
         if (!this.started || this.finished)
             return;
@@ -282,6 +330,14 @@ class ProcessTracker {
                 phase.status = 'completed';
                 phase.endTime = this.now();
             }
+            phase.items?.forEach((item) => {
+                if (item.status === 'running')
+                    item.status = 'completed';
+            });
+            phase.actions?.forEach((action) => {
+                if (action.status === 'running')
+                    action.status = 'completed';
+            });
         });
         this.state.status = 'completed';
         this.state.endTime = this.now();

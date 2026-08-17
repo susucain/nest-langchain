@@ -56,6 +56,7 @@ __decorate([
 ], VideoSession.prototype, "updatedAt", void 0);
 exports.VideoSession = VideoSession = __decorate([
     (0, typeorm_1.Entity)('video_sessions'),
-    (0, typeorm_1.Index)(['sessionId'], { unique: true })
+    (0, typeorm_1.Index)(['sessionId'], { unique: true }),
+    (0, typeorm_1.Index)('idx_video_sessions_user_updated_id', ['userId', 'updatedAt', 'id'])
 ], VideoSession);
 //# sourceMappingURL=video-session.entity.js.map

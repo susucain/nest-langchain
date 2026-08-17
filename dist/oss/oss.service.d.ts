@@ -4,7 +4,18 @@ import { OssFile } from './entities/oss.entity';
 export declare class OssService {
     private ossFileRepo;
     private client;
+    private readonly transferMaxBytes;
     constructor(configService: ConfigService, ossFileRepo: Repository<OssFile>);
+    transferFromUrl(sourceUrl: string, options: {
+        ossKey: string;
+        fileName: string;
+        allowedMimeTypes: string[];
+    }): Promise<{
+        url: any;
+        fileType: string;
+        ossKey: string;
+    }>;
+    private validateTransferUrl;
     uploadFile(originalName: string, fileBuffer: Buffer, mimeType: string): Promise<{
         id: number;
         fileName: string;

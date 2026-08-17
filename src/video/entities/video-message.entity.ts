@@ -8,6 +8,7 @@ import {
 
 @Entity('video_message')
 @Index(['sessionId', 'createdAt'])
+@Index(['taskId', 'eventType'], { unique: true })
 export class VideoMessage {
   @PrimaryGeneratedColumn({ comment: '主键ID' })
   id: number;
@@ -32,6 +33,12 @@ export class VideoMessage {
 
   @Column({ name: 'metadata', type: 'json', nullable: true, comment: '消息元数据（如生成脚本的 script_id）' })
   metadata: Record<string, any>;
+
+  @Column({ name: 'task_id', type: 'varchar', length: 128, nullable: true, comment: '关联视频任务ID' })
+  taskId: string;
+
+  @Column({ name: 'event_type', type: 'varchar', length: 64, nullable: true, comment: '系统事件类型' })
+  eventType: string;
 
   @CreateDateColumn({ name: 'created_at', comment: '创建时间' })
   createdAt: Date;

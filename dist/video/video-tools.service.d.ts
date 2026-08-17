@@ -5,11 +5,18 @@ import { VideoSession } from './entities/video-session.entity';
 import { VideoTask } from './entities/video-task.entity';
 import { StoryboardParserService } from './storyboard-parser.service';
 import { VideoTaskService } from './video-task.service';
+import { SeedancePromptValidatorService } from './seedance-prompt-validator.service';
 interface ToolContext {
     sessionId: string;
     userId: number;
     currentMessageId?: number;
     referencedVersion?: number;
+    waitingForUser?: boolean;
+    scriptUnchanged?: boolean;
+    fullVideoEdit?: {
+        sourceAssetId: number;
+        sourceDurationSec: number;
+    };
 }
 export declare class VideoToolsService {
     private assetRepo;
@@ -18,8 +25,9 @@ export declare class VideoToolsService {
     private taskRepo;
     private storyboardParser;
     private taskService;
+    private seedancePromptValidator;
     private readonly skillsDir;
-    constructor(assetRepo: Repository<VideoAsset>, scriptRepo: Repository<VideoScript>, sessionRepo: Repository<VideoSession>, taskRepo: Repository<VideoTask>, storyboardParser: StoryboardParserService, taskService: VideoTaskService);
+    constructor(assetRepo: Repository<VideoAsset>, scriptRepo: Repository<VideoScript>, sessionRepo: Repository<VideoSession>, taskRepo: Repository<VideoTask>, storyboardParser: StoryboardParserService, taskService: VideoTaskService, seedancePromptValidator: SeedancePromptValidatorService);
     buildTools(ctx: ToolContext): {
         start_script_creation: ({
             title?: string;
@@ -1484,6 +1492,15 @@ export declare class VideoToolsService {
                 output: NoInfer<{
                     success: boolean;
                     message: string;
+                    warnings?: undefined;
+                    script_id?: undefined;
+                    version?: undefined;
+                    title?: undefined;
+                    shot_count?: undefined;
+                } | {
+                    success: boolean;
+                    message: string;
+                    warnings: string[];
                     script_id?: undefined;
                     version?: undefined;
                     title?: undefined;
@@ -1494,6 +1511,7 @@ export declare class VideoToolsService {
                     title: string;
                     shot_count: number;
                     message: string;
+                    warnings: string[];
                     success?: undefined;
                 }>;
             }) => import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput | PromiseLike<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput>) | undefined;
@@ -1501,6 +1519,15 @@ export declare class VideoToolsService {
             outputSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
                 success: boolean;
                 message: string;
+                warnings?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                title?: undefined;
+                shot_count?: undefined;
+            } | {
+                success: boolean;
+                message: string;
+                warnings: string[];
                 script_id?: undefined;
                 version?: undefined;
                 title?: undefined;
@@ -1511,6 +1538,7 @@ export declare class VideoToolsService {
                 title: string;
                 shot_count: number;
                 message: string;
+                warnings: string[];
                 success?: undefined;
             }> | undefined;
             execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
@@ -1521,6 +1549,15 @@ export declare class VideoToolsService {
             }, {
                 success: boolean;
                 message: string;
+                warnings?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                title?: undefined;
+                shot_count?: undefined;
+            } | {
+                success: boolean;
+                message: string;
+                warnings: string[];
                 script_id?: undefined;
                 version?: undefined;
                 title?: undefined;
@@ -1531,6 +1568,7 @@ export declare class VideoToolsService {
                 title: string;
                 shot_count: number;
                 message: string;
+                warnings: string[];
                 success?: undefined;
             }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
         } & {
@@ -1562,6 +1600,15 @@ export declare class VideoToolsService {
             }, {
                 success: boolean;
                 message: string;
+                warnings?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                title?: undefined;
+                shot_count?: undefined;
+            } | {
+                success: boolean;
+                message: string;
+                warnings: string[];
                 script_id?: undefined;
                 version?: undefined;
                 title?: undefined;
@@ -1572,6 +1619,7 @@ export declare class VideoToolsService {
                 title: string;
                 shot_count: number;
                 message: string;
+                warnings: string[];
                 success?: undefined;
             }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
         }) | ({
@@ -1614,6 +1662,15 @@ export declare class VideoToolsService {
                 output: NoInfer<{
                     success: boolean;
                     message: string;
+                    warnings?: undefined;
+                    script_id?: undefined;
+                    version?: undefined;
+                    title?: undefined;
+                    shot_count?: undefined;
+                } | {
+                    success: boolean;
+                    message: string;
+                    warnings: string[];
                     script_id?: undefined;
                     version?: undefined;
                     title?: undefined;
@@ -1624,6 +1681,7 @@ export declare class VideoToolsService {
                     title: string;
                     shot_count: number;
                     message: string;
+                    warnings: string[];
                     success?: undefined;
                 }>;
             }) => import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput | PromiseLike<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput>) | undefined;
@@ -1631,6 +1689,15 @@ export declare class VideoToolsService {
             outputSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
                 success: boolean;
                 message: string;
+                warnings?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                title?: undefined;
+                shot_count?: undefined;
+            } | {
+                success: boolean;
+                message: string;
+                warnings: string[];
                 script_id?: undefined;
                 version?: undefined;
                 title?: undefined;
@@ -1641,6 +1708,7 @@ export declare class VideoToolsService {
                 title: string;
                 shot_count: number;
                 message: string;
+                warnings: string[];
                 success?: undefined;
             }> | undefined;
             execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
@@ -1651,6 +1719,15 @@ export declare class VideoToolsService {
             }, {
                 success: boolean;
                 message: string;
+                warnings?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                title?: undefined;
+                shot_count?: undefined;
+            } | {
+                success: boolean;
+                message: string;
+                warnings: string[];
                 script_id?: undefined;
                 version?: undefined;
                 title?: undefined;
@@ -1661,6 +1738,7 @@ export declare class VideoToolsService {
                 title: string;
                 shot_count: number;
                 message: string;
+                warnings: string[];
                 success?: undefined;
             }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
         } & {
@@ -1692,6 +1770,15 @@ export declare class VideoToolsService {
             }, {
                 success: boolean;
                 message: string;
+                warnings?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                title?: undefined;
+                shot_count?: undefined;
+            } | {
+                success: boolean;
+                message: string;
+                warnings: string[];
                 script_id?: undefined;
                 version?: undefined;
                 title?: undefined;
@@ -1702,6 +1789,7 @@ export declare class VideoToolsService {
                 title: string;
                 shot_count: number;
                 message: string;
+                warnings: string[];
                 success?: undefined;
             }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
         }) | ({
@@ -1744,6 +1832,15 @@ export declare class VideoToolsService {
                 output: NoInfer<{
                     success: boolean;
                     message: string;
+                    warnings?: undefined;
+                    script_id?: undefined;
+                    version?: undefined;
+                    title?: undefined;
+                    shot_count?: undefined;
+                } | {
+                    success: boolean;
+                    message: string;
+                    warnings: string[];
                     script_id?: undefined;
                     version?: undefined;
                     title?: undefined;
@@ -1754,6 +1851,7 @@ export declare class VideoToolsService {
                     title: string;
                     shot_count: number;
                     message: string;
+                    warnings: string[];
                     success?: undefined;
                 }>;
             }) => import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput | PromiseLike<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput>) | undefined;
@@ -1761,6 +1859,15 @@ export declare class VideoToolsService {
             outputSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
                 success: boolean;
                 message: string;
+                warnings?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                title?: undefined;
+                shot_count?: undefined;
+            } | {
+                success: boolean;
+                message: string;
+                warnings: string[];
                 script_id?: undefined;
                 version?: undefined;
                 title?: undefined;
@@ -1771,6 +1878,7 @@ export declare class VideoToolsService {
                 title: string;
                 shot_count: number;
                 message: string;
+                warnings: string[];
                 success?: undefined;
             }> | undefined;
             execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
@@ -1781,6 +1889,15 @@ export declare class VideoToolsService {
             }, {
                 success: boolean;
                 message: string;
+                warnings?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                title?: undefined;
+                shot_count?: undefined;
+            } | {
+                success: boolean;
+                message: string;
+                warnings: string[];
                 script_id?: undefined;
                 version?: undefined;
                 title?: undefined;
@@ -1791,6 +1908,7 @@ export declare class VideoToolsService {
                 title: string;
                 shot_count: number;
                 message: string;
+                warnings: string[];
                 success?: undefined;
             }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
         } & {
@@ -1812,6 +1930,15 @@ export declare class VideoToolsService {
             }, {
                 success: boolean;
                 message: string;
+                warnings?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                title?: undefined;
+                shot_count?: undefined;
+            } | {
+                success: boolean;
+                message: string;
+                warnings: string[];
                 script_id?: undefined;
                 version?: undefined;
                 title?: undefined;
@@ -1822,6 +1949,7 @@ export declare class VideoToolsService {
                 title: string;
                 shot_count: number;
                 message: string;
+                warnings: string[];
                 success?: undefined;
             }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
         }) | ({
@@ -1864,6 +1992,15 @@ export declare class VideoToolsService {
                 output: NoInfer<{
                     success: boolean;
                     message: string;
+                    warnings?: undefined;
+                    script_id?: undefined;
+                    version?: undefined;
+                    title?: undefined;
+                    shot_count?: undefined;
+                } | {
+                    success: boolean;
+                    message: string;
+                    warnings: string[];
                     script_id?: undefined;
                     version?: undefined;
                     title?: undefined;
@@ -1874,6 +2011,7 @@ export declare class VideoToolsService {
                     title: string;
                     shot_count: number;
                     message: string;
+                    warnings: string[];
                     success?: undefined;
                 }>;
             }) => import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput | PromiseLike<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput>) | undefined;
@@ -1881,6 +2019,15 @@ export declare class VideoToolsService {
             outputSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
                 success: boolean;
                 message: string;
+                warnings?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                title?: undefined;
+                shot_count?: undefined;
+            } | {
+                success: boolean;
+                message: string;
+                warnings: string[];
                 script_id?: undefined;
                 version?: undefined;
                 title?: undefined;
@@ -1891,6 +2038,7 @@ export declare class VideoToolsService {
                 title: string;
                 shot_count: number;
                 message: string;
+                warnings: string[];
                 success?: undefined;
             }> | undefined;
             execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
@@ -1901,6 +2049,15 @@ export declare class VideoToolsService {
             }, {
                 success: boolean;
                 message: string;
+                warnings?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                title?: undefined;
+                shot_count?: undefined;
+            } | {
+                success: boolean;
+                message: string;
+                warnings: string[];
                 script_id?: undefined;
                 version?: undefined;
                 title?: undefined;
@@ -1911,6 +2068,7 @@ export declare class VideoToolsService {
                 title: string;
                 shot_count: number;
                 message: string;
+                warnings: string[];
                 success?: undefined;
             }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
         } & {
@@ -1932,6 +2090,15 @@ export declare class VideoToolsService {
             }, {
                 success: boolean;
                 message: string;
+                warnings?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                title?: undefined;
+                shot_count?: undefined;
+            } | {
+                success: boolean;
+                message: string;
+                warnings: string[];
                 script_id?: undefined;
                 version?: undefined;
                 title?: undefined;
@@ -1942,7 +2109,804 @@ export declare class VideoToolsService {
                 title: string;
                 shot_count: number;
                 message: string;
+                warnings: string[];
                 success?: undefined;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        });
+        complete_without_script_change: ({
+            title?: string;
+            providerOptions?: import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ProviderOptions;
+            metadata?: import(".pnpm/@ai-sdk+provider@4.0.4/node_modules/@ai-sdk/provider", { with: { "resolution-mode": "import" } }).JSONObject;
+            inputSchema: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                script_id: any;
+                description: any;
+            }>;
+            contextSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context> | undefined;
+            needsApproval?: boolean | import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolNeedsApprovalFunction<{
+                script_id: any;
+                description: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>> | undefined;
+            onInputStart?: ((options: import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputDelta?: ((options: {
+                inputTextDelta: string;
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputAvailable?: ((options: {
+                input: {
+                    script_id: any;
+                    description: any;
+                };
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            toModelOutput?: ((options: {
+                toolCallId: string;
+                input: {
+                    script_id: any;
+                    description: any;
+                };
+                output: NoInfer<{
+                    success: boolean;
+                    message: string;
+                    status?: undefined;
+                    script_id?: undefined;
+                    version?: undefined;
+                    description?: undefined;
+                } | {
+                    success: boolean;
+                    status: string;
+                    script_id: number;
+                    version: number;
+                    description: any;
+                    message?: undefined;
+                }>;
+            }) => import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput | PromiseLike<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput>) | undefined;
+        } & {
+            outputSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                success: boolean;
+                message: string;
+                status?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                description?: undefined;
+            } | {
+                success: boolean;
+                status: string;
+                script_id: number;
+                version: number;
+                description: any;
+                message?: undefined;
+            }> | undefined;
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                script_id: any;
+                description: any;
+            }, {
+                success: boolean;
+                message: string;
+                status?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                description?: undefined;
+            } | {
+                success: boolean;
+                status: string;
+                script_id: number;
+                version: number;
+                description: any;
+                message?: undefined;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        } & {
+            description?: string | ((options: {
+                context: NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>;
+                experimental_sandbox?: import("ai", { with: { "resolution-mode": "import" } }).Experimental_SandboxSession;
+            }) => string) | undefined;
+            strict?: boolean;
+            inputExamples?: {
+                input: NoInfer<{
+                    script_id: any;
+                    description: any;
+                }>;
+            }[] | undefined;
+            id?: never;
+            isProviderExecuted?: never;
+            args?: never;
+            supportsDeferredResults?: never;
+        } & {
+            type?: undefined | "function";
+        } & {
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                script_id: any;
+                description: any;
+            }, {
+                success: boolean;
+                message: string;
+                status?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                description?: undefined;
+            } | {
+                success: boolean;
+                status: string;
+                script_id: number;
+                version: number;
+                description: any;
+                message?: undefined;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        }) | ({
+            title?: string;
+            providerOptions?: import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ProviderOptions;
+            metadata?: import(".pnpm/@ai-sdk+provider@4.0.4/node_modules/@ai-sdk/provider", { with: { "resolution-mode": "import" } }).JSONObject;
+            inputSchema: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                script_id: any;
+                description: any;
+            }>;
+            contextSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context> | undefined;
+            needsApproval?: boolean | import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolNeedsApprovalFunction<{
+                script_id: any;
+                description: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>> | undefined;
+            onInputStart?: ((options: import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputDelta?: ((options: {
+                inputTextDelta: string;
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputAvailable?: ((options: {
+                input: {
+                    script_id: any;
+                    description: any;
+                };
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            toModelOutput?: ((options: {
+                toolCallId: string;
+                input: {
+                    script_id: any;
+                    description: any;
+                };
+                output: NoInfer<{
+                    success: boolean;
+                    message: string;
+                    status?: undefined;
+                    script_id?: undefined;
+                    version?: undefined;
+                    description?: undefined;
+                } | {
+                    success: boolean;
+                    status: string;
+                    script_id: number;
+                    version: number;
+                    description: any;
+                    message?: undefined;
+                }>;
+            }) => import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput | PromiseLike<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput>) | undefined;
+        } & {
+            outputSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                success: boolean;
+                message: string;
+                status?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                description?: undefined;
+            } | {
+                success: boolean;
+                status: string;
+                script_id: number;
+                version: number;
+                description: any;
+                message?: undefined;
+            }> | undefined;
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                script_id: any;
+                description: any;
+            }, {
+                success: boolean;
+                message: string;
+                status?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                description?: undefined;
+            } | {
+                success: boolean;
+                status: string;
+                script_id: number;
+                version: number;
+                description: any;
+                message?: undefined;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        } & {
+            description?: string | ((options: {
+                context: NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>;
+                experimental_sandbox?: import("ai", { with: { "resolution-mode": "import" } }).Experimental_SandboxSession;
+            }) => string) | undefined;
+            strict?: boolean;
+            inputExamples?: {
+                input: NoInfer<{
+                    script_id: any;
+                    description: any;
+                }>;
+            }[] | undefined;
+            id?: never;
+            isProviderExecuted?: never;
+            args?: never;
+            supportsDeferredResults?: never;
+        } & {
+            type: "dynamic";
+        } & {
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                script_id: any;
+                description: any;
+            }, {
+                success: boolean;
+                message: string;
+                status?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                description?: undefined;
+            } | {
+                success: boolean;
+                status: string;
+                script_id: number;
+                version: number;
+                description: any;
+                message?: undefined;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        }) | ({
+            title?: string;
+            providerOptions?: import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ProviderOptions;
+            metadata?: import(".pnpm/@ai-sdk+provider@4.0.4/node_modules/@ai-sdk/provider", { with: { "resolution-mode": "import" } }).JSONObject;
+            inputSchema: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                script_id: any;
+                description: any;
+            }>;
+            contextSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context> | undefined;
+            needsApproval?: boolean | import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolNeedsApprovalFunction<{
+                script_id: any;
+                description: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>> | undefined;
+            onInputStart?: ((options: import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputDelta?: ((options: {
+                inputTextDelta: string;
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputAvailable?: ((options: {
+                input: {
+                    script_id: any;
+                    description: any;
+                };
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            toModelOutput?: ((options: {
+                toolCallId: string;
+                input: {
+                    script_id: any;
+                    description: any;
+                };
+                output: NoInfer<{
+                    success: boolean;
+                    message: string;
+                    status?: undefined;
+                    script_id?: undefined;
+                    version?: undefined;
+                    description?: undefined;
+                } | {
+                    success: boolean;
+                    status: string;
+                    script_id: number;
+                    version: number;
+                    description: any;
+                    message?: undefined;
+                }>;
+            }) => import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput | PromiseLike<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput>) | undefined;
+        } & {
+            outputSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                success: boolean;
+                message: string;
+                status?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                description?: undefined;
+            } | {
+                success: boolean;
+                status: string;
+                script_id: number;
+                version: number;
+                description: any;
+                message?: undefined;
+            }> | undefined;
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                script_id: any;
+                description: any;
+            }, {
+                success: boolean;
+                message: string;
+                status?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                description?: undefined;
+            } | {
+                success: boolean;
+                status: string;
+                script_id: number;
+                version: number;
+                description: any;
+                message?: undefined;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        } & {
+            type: "provider";
+            id: `${string}.${string}`;
+            args: Record<string, unknown>;
+            description?: never;
+            strict?: never;
+            inputExamples?: never;
+        } & {
+            isProviderExecuted: false;
+            supportsDeferredResults?: never;
+        } & {
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                script_id: any;
+                description: any;
+            }, {
+                success: boolean;
+                message: string;
+                status?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                description?: undefined;
+            } | {
+                success: boolean;
+                status: string;
+                script_id: number;
+                version: number;
+                description: any;
+                message?: undefined;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        }) | ({
+            title?: string;
+            providerOptions?: import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ProviderOptions;
+            metadata?: import(".pnpm/@ai-sdk+provider@4.0.4/node_modules/@ai-sdk/provider", { with: { "resolution-mode": "import" } }).JSONObject;
+            inputSchema: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                script_id: any;
+                description: any;
+            }>;
+            contextSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context> | undefined;
+            needsApproval?: boolean | import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolNeedsApprovalFunction<{
+                script_id: any;
+                description: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>> | undefined;
+            onInputStart?: ((options: import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputDelta?: ((options: {
+                inputTextDelta: string;
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputAvailable?: ((options: {
+                input: {
+                    script_id: any;
+                    description: any;
+                };
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            toModelOutput?: ((options: {
+                toolCallId: string;
+                input: {
+                    script_id: any;
+                    description: any;
+                };
+                output: NoInfer<{
+                    success: boolean;
+                    message: string;
+                    status?: undefined;
+                    script_id?: undefined;
+                    version?: undefined;
+                    description?: undefined;
+                } | {
+                    success: boolean;
+                    status: string;
+                    script_id: number;
+                    version: number;
+                    description: any;
+                    message?: undefined;
+                }>;
+            }) => import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput | PromiseLike<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput>) | undefined;
+        } & {
+            outputSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                success: boolean;
+                message: string;
+                status?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                description?: undefined;
+            } | {
+                success: boolean;
+                status: string;
+                script_id: number;
+                version: number;
+                description: any;
+                message?: undefined;
+            }> | undefined;
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                script_id: any;
+                description: any;
+            }, {
+                success: boolean;
+                message: string;
+                status?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                description?: undefined;
+            } | {
+                success: boolean;
+                status: string;
+                script_id: number;
+                version: number;
+                description: any;
+                message?: undefined;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        } & {
+            type: "provider";
+            id: `${string}.${string}`;
+            args: Record<string, unknown>;
+            description?: never;
+            strict?: never;
+            inputExamples?: never;
+        } & {
+            isProviderExecuted: true;
+            supportsDeferredResults?: boolean;
+        } & {
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                script_id: any;
+                description: any;
+            }, {
+                success: boolean;
+                message: string;
+                status?: undefined;
+                script_id?: undefined;
+                version?: undefined;
+                description?: undefined;
+            } | {
+                success: boolean;
+                status: string;
+                script_id: number;
+                version: number;
+                description: any;
+                message?: undefined;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        });
+        request_user_confirmation: ({
+            title?: string;
+            providerOptions?: import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ProviderOptions;
+            metadata?: import(".pnpm/@ai-sdk+provider@4.0.4/node_modules/@ai-sdk/provider", { with: { "resolution-mode": "import" } }).JSONObject;
+            inputSchema: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                title: any;
+                description: any;
+                questions: any;
+            }>;
+            contextSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context> | undefined;
+            needsApproval?: boolean | import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolNeedsApprovalFunction<{
+                title: any;
+                description: any;
+                questions: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>> | undefined;
+            onInputStart?: ((options: import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputDelta?: ((options: {
+                inputTextDelta: string;
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputAvailable?: ((options: {
+                input: {
+                    title: any;
+                    description: any;
+                    questions: any;
+                };
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            toModelOutput?: ((options: {
+                toolCallId: string;
+                input: {
+                    title: any;
+                    description: any;
+                    questions: any;
+                };
+                output: NoInfer<{
+                    success: boolean;
+                    status: string;
+                    title: any;
+                    description: any;
+                    questions: any;
+                }>;
+            }) => import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput | PromiseLike<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput>) | undefined;
+        } & {
+            outputSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                success: boolean;
+                status: string;
+                title: any;
+                description: any;
+                questions: any;
+            }> | undefined;
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                title: any;
+                description: any;
+                questions: any;
+            }, {
+                success: boolean;
+                status: string;
+                title: any;
+                description: any;
+                questions: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        } & {
+            description?: string | ((options: {
+                context: NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>;
+                experimental_sandbox?: import("ai", { with: { "resolution-mode": "import" } }).Experimental_SandboxSession;
+            }) => string) | undefined;
+            strict?: boolean;
+            inputExamples?: {
+                input: NoInfer<{
+                    title: any;
+                    description: any;
+                    questions: any;
+                }>;
+            }[] | undefined;
+            id?: never;
+            isProviderExecuted?: never;
+            args?: never;
+            supportsDeferredResults?: never;
+        } & {
+            type?: undefined | "function";
+        } & {
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                title: any;
+                description: any;
+                questions: any;
+            }, {
+                success: boolean;
+                status: string;
+                title: any;
+                description: any;
+                questions: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        }) | ({
+            title?: string;
+            providerOptions?: import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ProviderOptions;
+            metadata?: import(".pnpm/@ai-sdk+provider@4.0.4/node_modules/@ai-sdk/provider", { with: { "resolution-mode": "import" } }).JSONObject;
+            inputSchema: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                title: any;
+                description: any;
+                questions: any;
+            }>;
+            contextSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context> | undefined;
+            needsApproval?: boolean | import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolNeedsApprovalFunction<{
+                title: any;
+                description: any;
+                questions: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>> | undefined;
+            onInputStart?: ((options: import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputDelta?: ((options: {
+                inputTextDelta: string;
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputAvailable?: ((options: {
+                input: {
+                    title: any;
+                    description: any;
+                    questions: any;
+                };
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            toModelOutput?: ((options: {
+                toolCallId: string;
+                input: {
+                    title: any;
+                    description: any;
+                    questions: any;
+                };
+                output: NoInfer<{
+                    success: boolean;
+                    status: string;
+                    title: any;
+                    description: any;
+                    questions: any;
+                }>;
+            }) => import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput | PromiseLike<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput>) | undefined;
+        } & {
+            outputSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                success: boolean;
+                status: string;
+                title: any;
+                description: any;
+                questions: any;
+            }> | undefined;
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                title: any;
+                description: any;
+                questions: any;
+            }, {
+                success: boolean;
+                status: string;
+                title: any;
+                description: any;
+                questions: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        } & {
+            description?: string | ((options: {
+                context: NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>;
+                experimental_sandbox?: import("ai", { with: { "resolution-mode": "import" } }).Experimental_SandboxSession;
+            }) => string) | undefined;
+            strict?: boolean;
+            inputExamples?: {
+                input: NoInfer<{
+                    title: any;
+                    description: any;
+                    questions: any;
+                }>;
+            }[] | undefined;
+            id?: never;
+            isProviderExecuted?: never;
+            args?: never;
+            supportsDeferredResults?: never;
+        } & {
+            type: "dynamic";
+        } & {
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                title: any;
+                description: any;
+                questions: any;
+            }, {
+                success: boolean;
+                status: string;
+                title: any;
+                description: any;
+                questions: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        }) | ({
+            title?: string;
+            providerOptions?: import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ProviderOptions;
+            metadata?: import(".pnpm/@ai-sdk+provider@4.0.4/node_modules/@ai-sdk/provider", { with: { "resolution-mode": "import" } }).JSONObject;
+            inputSchema: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                title: any;
+                description: any;
+                questions: any;
+            }>;
+            contextSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context> | undefined;
+            needsApproval?: boolean | import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolNeedsApprovalFunction<{
+                title: any;
+                description: any;
+                questions: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>> | undefined;
+            onInputStart?: ((options: import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputDelta?: ((options: {
+                inputTextDelta: string;
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputAvailable?: ((options: {
+                input: {
+                    title: any;
+                    description: any;
+                    questions: any;
+                };
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            toModelOutput?: ((options: {
+                toolCallId: string;
+                input: {
+                    title: any;
+                    description: any;
+                    questions: any;
+                };
+                output: NoInfer<{
+                    success: boolean;
+                    status: string;
+                    title: any;
+                    description: any;
+                    questions: any;
+                }>;
+            }) => import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput | PromiseLike<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput>) | undefined;
+        } & {
+            outputSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                success: boolean;
+                status: string;
+                title: any;
+                description: any;
+                questions: any;
+            }> | undefined;
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                title: any;
+                description: any;
+                questions: any;
+            }, {
+                success: boolean;
+                status: string;
+                title: any;
+                description: any;
+                questions: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        } & {
+            type: "provider";
+            id: `${string}.${string}`;
+            args: Record<string, unknown>;
+            description?: never;
+            strict?: never;
+            inputExamples?: never;
+        } & {
+            isProviderExecuted: false;
+            supportsDeferredResults?: never;
+        } & {
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                title: any;
+                description: any;
+                questions: any;
+            }, {
+                success: boolean;
+                status: string;
+                title: any;
+                description: any;
+                questions: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        }) | ({
+            title?: string;
+            providerOptions?: import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ProviderOptions;
+            metadata?: import(".pnpm/@ai-sdk+provider@4.0.4/node_modules/@ai-sdk/provider", { with: { "resolution-mode": "import" } }).JSONObject;
+            inputSchema: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                title: any;
+                description: any;
+                questions: any;
+            }>;
+            contextSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context> | undefined;
+            needsApproval?: boolean | import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolNeedsApprovalFunction<{
+                title: any;
+                description: any;
+                questions: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>> | undefined;
+            onInputStart?: ((options: import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputDelta?: ((options: {
+                inputTextDelta: string;
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            onInputAvailable?: ((options: {
+                input: {
+                    title: any;
+                    description: any;
+                    questions: any;
+                };
+            } & import("ai", { with: { "resolution-mode": "import" } }).ToolExecutionOptions<NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>) => void | PromiseLike<void>) | undefined;
+            toModelOutput?: ((options: {
+                toolCallId: string;
+                input: {
+                    title: any;
+                    description: any;
+                    questions: any;
+                };
+                output: NoInfer<{
+                    success: boolean;
+                    status: string;
+                    title: any;
+                    description: any;
+                    questions: any;
+                }>;
+            }) => import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput | PromiseLike<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).ToolResultOutput>) | undefined;
+        } & {
+            outputSchema?: import("ai", { with: { "resolution-mode": "import" } }).FlexibleSchema<{
+                success: boolean;
+                status: string;
+                title: any;
+                description: any;
+                questions: any;
+            }> | undefined;
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                title: any;
+                description: any;
+                questions: any;
+            }, {
+                success: boolean;
+                status: string;
+                title: any;
+                description: any;
+                questions: any;
+            }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
+        } & {
+            type: "provider";
+            id: `${string}.${string}`;
+            args: Record<string, unknown>;
+            description?: never;
+            strict?: never;
+            inputExamples?: never;
+        } & {
+            isProviderExecuted: true;
+            supportsDeferredResults?: boolean;
+        } & {
+            execute: import("ai", { with: { "resolution-mode": "import" } }).ToolExecuteFunction<{
+                title: any;
+                description: any;
+                questions: any;
+            }, {
+                success: boolean;
+                status: string;
+                title: any;
+                description: any;
+                questions: any;
             }, NoInfer<import(".pnpm/@ai-sdk+provider-utils@5.0.15_zod@4.4.3/node_modules/@ai-sdk/provider-utils", { with: { "resolution-mode": "import" } }).Context>>;
         });
         create_video_task: ({
@@ -5054,6 +6018,8 @@ export declare class VideoToolsService {
         });
     };
     private buildStartScriptCreationTool;
+    private buildRequestUserConfirmationTool;
+    private buildCompleteWithoutScriptChangeTool;
     private resolveSkillPath;
     private buildReadFileTool;
     private buildWriteFileTool;
