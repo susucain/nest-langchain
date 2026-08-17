@@ -20,7 +20,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "docker:up": "docker-compose -f docker-compose.dev.yml up -d",
     "docker:down": "docker-compose -f docker-compose.dev.yml down",
-    "docker:prod:up": "docker compose -f docker-compose.prod.yml up -d --build",
+    "docker:prod:up": "docker compose --env-file .env.deploy -f docker-compose.prod.yml up -d",
     "docker:prod:down": "docker compose -f docker-compose.prod.yml down"
   },
   "dependencies": {

@@ -1,29 +1,37 @@
-# ===== 本地构建模式（dist/ 已在本地预构建并上传） =====
-FROM node:24.15-alpine
+FROM node:24.15-alpine AS builder
 
-ENV NODE_ENV=production
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
 
 WORKDIR /app
 
-# 启用 pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
 
-# 复制依赖文件
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
 
-# 仅安装生产依赖
-RUN pnpm install --frozen-lockfile --prod
+COPY nest-cli.json tsconfig.json tsconfig.build.json ./
+COPY src ./src
+RUN pnpm build
 
-# 复制本地预构建产物
-COPY dist ./dist
-COPY public ./public
-# 复制 skills 规范目录（read_file / write_file 的沙箱根），
-# 通过 SKILLS_DIR 覆盖代码中基于 process.cwd() 的默认定位
-COPY src/video/skills ./skills
+FROM node:24.15-alpine AS production
+
+ENV NODE_ENV=production
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
 ENV SKILLS_DIR=/app/skills
 
-# 声明端口
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile --prod
+
+COPY --from=builder /app/dist ./dist
+COPY public ./public
+COPY src/video/skills ./skills
+
 EXPOSE 3000
 
-# 启动命令
 CMD ["node", "dist/main.js"]

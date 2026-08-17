@@ -1,0 +1,109 @@
+name: Deploy backend to production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: backend-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  IMAGE_REPOSITORY: crpi-sddlrqkeigsw33zb.cn-hangzhou.personal.cr.aliyuncs.com/my_ai_project/story_sell_api
+  IMAGE_TAG: sha-${{ github.sha }}
+
+jobs:
+  build-and-deploy:
+    name: Build, publish and deploy
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.15.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit tests
+        run: pnpm test --runInBand
+
+      - name: Compile application
+        run: pnpm build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Alibaba Cloud ACR
+        uses: docker/login-action@v3
+        with:
+          registry: crpi-sddlrqkeigsw33zb.cn-hangzhou.personal.cr.aliyuncs.com
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: |
+            ${{ env.IMAGE_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Configure SSH
+        env:
+          ECS_KNOWN_HOSTS: ${{ secrets.ECS_KNOWN_HOSTS }}
+          ECS_SSH_PRIVATE_KEY: ${{ secrets.ECS_SSH_PRIVATE_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$ECS_SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+          printf '%s\n' "$ECS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/deploy_key ~/.ssh/known_hosts
+
+      - name: Upload deployment files
+        env:
+          ECS_HOST: ${{ secrets.ECS_HOST }}
+          ECS_PORT: ${{ secrets.ECS_PORT }}
+          ECS_USER: ${{ secrets.ECS_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$ECS_PORT" \
+            "$ECS_USER@$ECS_HOST" \
+            "mkdir -p /opt/nest-langchain/scripts"
+          scp -i ~/.ssh/deploy_key -P "$ECS_PORT" \
+            docker-compose.prod.yml scripts/deploy-backend.sh \
+            "$ECS_USER@$ECS_HOST:/opt/nest-langchain/"
+          ssh -i ~/.ssh/deploy_key -p "$ECS_PORT" \
+            "$ECS_USER@$ECS_HOST" \
+            "mv /opt/nest-langchain/deploy-backend.sh /opt/nest-langchain/scripts/deploy-backend.sh && chmod 700 /opt/nest-langchain/scripts/deploy-backend.sh"
+
+      - name: Deploy immutable image
+        env:
+          ECS_HOST: ${{ secrets.ECS_HOST }}
+          ECS_PORT: ${{ secrets.ECS_PORT }}
+          ECS_USER: ${{ secrets.ECS_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -p "$ECS_PORT" \
+            "$ECS_USER@$ECS_HOST" \
+            "/opt/nest-langchain/scripts/deploy-backend.sh '${IMAGE_REPOSITORY}:${IMAGE_TAG}'"
