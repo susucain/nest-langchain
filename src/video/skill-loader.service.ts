@@ -10,15 +10,17 @@ export interface SkillMeta {
 
 export const VIDEO_SKILLS = {
   'life-service-storyboard-generator':
-    'src/video/skills/life-service-storyboard-generator/SKILL.md',
-  'sd2-pe': 'src/video/skills/sd2-pe/SKILL.md',
+    'life-service-storyboard-generator/SKILL.md',
+  'sd2-pe': 'sd2-pe/SKILL.md',
 } as const;
 
 export type VideoSkillName = keyof typeof VIDEO_SKILLS;
 
 @Injectable()
 export class SkillLoaderService {
-  private readonly projectDir = path.resolve(__dirname, '../..');
+  private readonly skillsDir = process.env.SKILLS_DIR
+    ? path.resolve(process.env.SKILLS_DIR)
+    : path.resolve(process.cwd(), 'src/video/skills');
 
   async loadMeta(skillName: VideoSkillName = 'life-service-storyboard-generator'): Promise<SkillMeta> {
     const content = await this.readSkillFile(this.getSkillPath(skillName));
@@ -48,7 +50,7 @@ export class SkillLoaderService {
   }
 
   private async readSkillFile(relativePath: string): Promise<string> {
-    const fullPath = path.join(this.projectDir, relativePath);
+    const fullPath = path.join(this.skillsDir, relativePath);
     return fs.readFile(fullPath, 'utf-8');
   }
 

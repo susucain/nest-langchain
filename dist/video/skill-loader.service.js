@@ -44,11 +44,13 @@ const common_1 = require("@nestjs/common");
 const fs = __importStar(require("node:fs/promises"));
 const path = __importStar(require("node:path"));
 exports.VIDEO_SKILLS = {
-    'life-service-storyboard-generator': 'src/video/skills/life-service-storyboard-generator/SKILL.md',
-    'sd2-pe': 'src/video/skills/sd2-pe/SKILL.md',
+    'life-service-storyboard-generator': 'life-service-storyboard-generator/SKILL.md',
+    'sd2-pe': 'sd2-pe/SKILL.md',
 };
 let SkillLoaderService = class SkillLoaderService {
-    projectDir = path.resolve(__dirname, '../..');
+    skillsDir = process.env.SKILLS_DIR
+        ? path.resolve(process.env.SKILLS_DIR)
+        : path.resolve(process.cwd(), 'src/video/skills');
     async loadMeta(skillName = 'life-service-storyboard-generator') {
         const content = await this.readSkillFile(this.getSkillPath(skillName));
         const match = content.match(/^---\n([\s\S]*?)\n---/);
@@ -74,7 +76,7 @@ let SkillLoaderService = class SkillLoaderService {
         return skillPath;
     }
     async readSkillFile(relativePath) {
-        const fullPath = path.join(this.projectDir, relativePath);
+        const fullPath = path.join(this.skillsDir, relativePath);
         return fs.readFile(fullPath, 'utf-8');
     }
     extractField(frontmatter, key) {
