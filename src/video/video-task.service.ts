@@ -172,8 +172,8 @@ export class VideoTaskService {
 
     this.logger.log(`创建视频生成任务: ${JSON.stringify(requestBody)}`);
 
-    // const response = await fetch(this.apiUrl, {
-    const response = await fetch('', {
+    const response = await fetch(this.apiUrl, {
+    // const response = await fetch('', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
       body: JSON.stringify(requestBody),
