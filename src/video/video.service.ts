@@ -23,6 +23,7 @@ import { StoryboardParserService } from './storyboard-parser.service';
 import { VideoToolsService } from './video-tools.service';
 import { VideoTaskService } from './video-task.service';
 import { ProcessTracker } from './process-tracker';
+import { assertAgentFinalReply } from './agent-reply.validation';
 
 const RECENT_MESSAGE_LIMIT = 6;
 const FALLBACK_USER_ID = 1;
@@ -199,7 +200,7 @@ export class VideoService {
                 instructions: system,
                 model: this.llmService.getProvider()(this.llmService.getModel()),
                 tools,
-                stopWhen: isStepCount(10),
+                stopWhen: isStepCount(20),
                 telemetry: {
                   isEnabled: true,
                   functionId: 'video-storyboard-chat',
@@ -232,6 +233,7 @@ export class VideoService {
                 'langfuse.trace.output',
                 JSON.stringify({ reply: replyText.join('') }),
               );
+              assertAgentFinalReply(replyText.join(''));
               tracker.finish();
             },
           );
@@ -586,6 +588,13 @@ export class VideoService {
       ?.filter((p: any) => p.type === 'text')
       .map((p: any) => p.text)
       .join('') || '';
+
+    if (!text.trim()) {
+      this.logger.error(
+        `跳过空 assistant 消息落库: sessionId=${sessionId}, messageId=${message.id}`,
+      );
+      return;
+    }
 
     // 仅记录工具名与结果摘要，不存储完整工具输出（脚本内容等由独立表承载）
     const toolCalls = message.parts

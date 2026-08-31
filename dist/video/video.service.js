@@ -30,6 +30,7 @@ const storyboard_parser_service_1 = require("./storyboard-parser.service");
 const video_tools_service_1 = require("./video-tools.service");
 const video_task_service_1 = require("./video-task.service");
 const process_tracker_1 = require("./process-tracker");
+const agent_reply_validation_1 = require("./agent-reply.validation");
 const RECENT_MESSAGE_LIMIT = 6;
 const FALLBACK_USER_ID = 1;
 let VideoService = VideoService_1 = class VideoService {
@@ -166,7 +167,7 @@ let VideoService = VideoService_1 = class VideoService {
                             instructions: system,
                             model: this.llmService.getProvider()(this.llmService.getModel()),
                             tools,
-                            stopWhen: (0, ai_1.isStepCount)(10),
+                            stopWhen: (0, ai_1.isStepCount)(20),
                             telemetry: {
                                 isEnabled: true,
                                 functionId: 'video-storyboard-chat',
@@ -192,6 +193,7 @@ let VideoService = VideoService_1 = class VideoService {
                             writer.write(chunk);
                         }
                         rootSpan.setAttribute('langfuse.trace.output', JSON.stringify({ reply: replyText.join('') }));
+                        (0, agent_reply_validation_1.assertAgentFinalReply)(replyText.join(''));
                         tracker.finish();
                     });
                 }
@@ -498,6 +500,10 @@ let VideoService = VideoService_1 = class VideoService {
             ?.filter((p) => p.type === 'text')
             .map((p) => p.text)
             .join('') || '';
+        if (!text.trim()) {
+            this.logger.error(`跳过空 assistant 消息落库: sessionId=${sessionId}, messageId=${message.id}`);
+            return;
+        }
         const toolCalls = message.parts
             ?.filter((p) => (0, ai_1.isToolUIPart)(p))
             .map((p) => {
