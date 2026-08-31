@@ -131,7 +131,7 @@ let VideoTaskService = VideoTaskService_1 = class VideoTaskService {
         };
         requestBody.callback_url = this.getCallbackUrl();
         this.logger.log(`创建视频生成任务: ${JSON.stringify(requestBody)}`);
-        const response = await fetch('', {
+        const response = await fetch(this.apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
             body: JSON.stringify(requestBody),
